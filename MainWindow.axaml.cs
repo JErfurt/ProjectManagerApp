@@ -7,8 +7,6 @@ using ProjectManagerApp.Services;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Diagnostics;
-using System.IO;
 using System.Windows.Input;
 
 namespace ProjectManagerApp
@@ -28,10 +26,10 @@ namespace ProjectManagerApp
             Projects = new ObservableCollection<Project>(ProjectService.LoadProjects());
             DataContext = this;
 
-            // Команды
-            OpenFolderCommand = new RelayCommand<string>(OpenFolderAsync);
-            RemoveProjectCommand = new RelayCommand<Project>(RemoveProject);
-            RunBatchCommand = new RelayCommand<string>(RunBatchAsync);
+                    // Команды
+        OpenFolderCommand = new RelayCommand<string>(async (path) => await PlatformService.OpenFolderAsync(path));
+        RemoveProjectCommand = new RelayCommand<Project>(RemoveProject);
+        RunBatchCommand = new RelayCommand<string>(async (path) => await PlatformService.RunScriptAsync(path));
         }
 
         #region Public Methods
@@ -58,97 +56,18 @@ namespace ProjectManagerApp
         }
 
         // Метод открытия папки конфигурации
-        public void OpenConfigFolder(object sender, RoutedEventArgs args)
+        public async void OpenConfigFolder(object sender, RoutedEventArgs args)
         {
             var folderPath = ProjectService.AppDataFolder;
-            if (Directory.Exists(folderPath))
-            {
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = folderPath,
-                    UseShellExecute = true
-                });
-            }
-            else
-            {
-                var box = MessageBoxManager
-                    .GetMessageBoxStandard("Ошибка", "Папка конфигурации не найдена!",
-                    ButtonEnum.Ok, MsBox.Avalonia.Enums.Icon.Error);
-                box.ShowAsync();
-            }
+            await PlatformService.OpenFolderAsync(folderPath);
         }
         #endregion
 
         #region Private Methods
-        // Новый метод для запуска bat-файла
-        private async void RunBatchAsync(string folderPath)
-        {
-            if (string.IsNullOrEmpty(folderPath) || !Directory.Exists(folderPath))
-            {
-                var box = MessageBoxManager.GetMessageBoxStandard(
-                    "Ошибка", 
-                    "Папка проекта не найдена!",
-                    ButtonEnum.Ok, 
-                    MsBox.Avalonia.Enums.Icon.Error);
-                await box.ShowAsync();
-                return;
-            }
-
-            var batPath = Path.Combine(folderPath, "run.bat");
-            if (!File.Exists(batPath))
-            {
-                var box = MessageBoxManager.GetMessageBoxStandard(
-                    "Ошибка", 
-                    "Файл run.bat не найден!",
-                    ButtonEnum.Ok, 
-                    MsBox.Avalonia.Enums.Icon.Error);
-                await box.ShowAsync();
-                return;
-            }
-
-            try
-            {
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = batPath,
-                    WorkingDirectory = folderPath,
-                    UseShellExecute = true
-                });
-            }
-            catch (Exception ex)
-            {
-                var box = MessageBoxManager.GetMessageBoxStandard(
-                    "Ошибка запуска", 
-                    $"Ошибка: {ex.Message}",
-                    ButtonEnum.Ok, 
-                    MsBox.Avalonia.Enums.Icon.Error);
-                await box.ShowAsync();
-            }
-        }
         // Метод для удаления проекта из списка
         private void RemoveProject(Project project)
         {
             Projects.Remove(project);
-        }
-        // Метод для открытия папки
-        private void OpenFolderAsync(string folderPath)
-        {
-            if (!string.IsNullOrEmpty(folderPath) && Directory.Exists(folderPath))
-            {
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = folderPath,
-                    UseShellExecute = true
-                });
-            }
-            else
-            {
-                // Показать сообщение об ошибке, если папка недоступна
-                var box = MessageBoxManager
-                    .GetMessageBoxStandard("Ошибка", "Папка не найдена!",
-                    ButtonEnum.Ok, MsBox.Avalonia.Enums.Icon.Error);
-                box.ShowAsync();
-            }
         }
         #endregion
 
@@ -175,7 +94,11 @@ namespace ProjectManagerApp
             _canExecute = canExecute;
         }
 
-        public event EventHandler? CanExecuteChanged;
+        public event EventHandler? CanExecuteChanged
+        {
+            add { }
+            remove { }
+        }
 
         public bool CanExecute(object? parameter)
         {

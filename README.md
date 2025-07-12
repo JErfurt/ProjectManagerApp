@@ -48,14 +48,23 @@ dotnet run
 
 ### Creating a Distributable Package
 ```bash
-# For Windows
+# For Windows (x64)
 dotnet publish -c Release -r win-x64 --self-contained true
 
-# For Linux
+# For Windows (ARM64)
+dotnet publish -c Release -r win-arm64 --self-contained true
+
+# For Linux (x64)
 dotnet publish -c Release -r linux-x64 --self-contained true
 
-# For macOS
+# For Linux (ARM64)
+dotnet publish -c Release -r linux-arm64 --self-contained true
+
+# For macOS (Intel)
 dotnet publish -c Release -r osx-x64 --self-contained true
+
+# For macOS (Apple Silicon)
+dotnet publish -c Release -r osx-arm64 --self-contained true
 ```
 
 ## 📁 Project Structure
