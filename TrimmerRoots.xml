@@ -3,4 +3,7 @@
   <assembly fullname="Avalonia.Controls" />
   <assembly fullname="Avalonia.Themes.Fluent" />
   <assembly fullname="Avalonia.Fonts.Inter" />
+  <assembly fullname="Microsoft.Data.Sqlite" />
+  <assembly fullname="SQLitePCLRaw.core" />
+  <assembly fullname="SQLitePCLRaw.provider.e_sqlite3" />
 </linker>

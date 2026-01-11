@@ -7,18 +7,37 @@
         mc:Ignorable="d"
         x:Class="ProjectManagerApp.MainWindow"
         x:DataType="vm:MainWindow"
-        Width="1200" Height="600" Title="Project Manager">
+        Width="1300" Height="600" Title="Project Manager">
     <DockPanel>
         <!-- Панель инструментов -->
         <StackPanel Orientation="Horizontal" DockPanel.Dock="Top" Margin="10,10,10,0">
             <!-- Кнопка Открыть папку -->
             <Button Click="OpenConfigFolder" Content="{material:MaterialIconExt Kind=FolderOpen}" Width="32" Height="32" ToolTip.Tip="Открыть папку с конфигом" Margin="5"/>
 
-            <!-- Кнопка Сохранить -->
-            <Button Click="SaveProjects" Content="{material:MaterialIconExt Kind=ContentSave}" Width="32" Height="32" ToolTip.Tip="Сохранить" Margin="5"/>
-
             <!-- Кнопка Добавить строку -->
             <Button Click="AddProject" Content="{material:MaterialIconExt Kind=Plus}" Width="32" Height="32" ToolTip.Tip="Добавить строку" Margin="5"/>
+            
+            <!-- Разделитель -->
+            <Border Width="1" Background="Gray" Margin="10,5"/>
+            
+            <!-- Фильтр по языку -->
+            <TextBlock Text="Фильтр по языку:" VerticalAlignment="Center" Margin="5,0"/>
+            <ComboBox ItemsSource="{x:Static vm:MainWindow.FilterLanguages}" 
+                      SelectedItem="{Binding SelectedLanguageFilter}" 
+                      Width="150" 
+                      Margin="5"
+                      VerticalAlignment="Center"/>
+            
+            <!-- Разделитель -->
+            <Border Width="1" Background="Gray" Margin="10,5"/>
+            
+            <!-- Поиск -->
+            <material:MaterialIcon Kind="Magnify" Width="20" Height="20" VerticalAlignment="Center" Margin="5,0,0,0"/>
+            <TextBox Text="{Binding SearchQuery, Mode=TwoWay}" 
+                     Watermark="Поиск по названию и описанию..." 
+                     Width="250" 
+                     Margin="5"
+                     VerticalAlignment="Center"/>
         </StackPanel>
 
 
@@ -43,7 +62,7 @@
                                         Width="32" Height="32" 
                                         ToolTip.Tip="Открыть папку с проектом"
                                         Command="{x:Static vm:MainWindow.OpenFolderCommand}"
-                                        CommandParameter="{Binding FolderPath}" 
+                                        CommandParameter="{Binding}" 
                                         Margin="5">
                                     <material:MaterialIconExt Kind="FolderOpen"/>
                                 </Button>
@@ -51,7 +70,7 @@
                                         Width="32" Height="32"
                                         ToolTip.Tip="Открыть проект в редакторе"
                                         Command="{x:Static vm:MainWindow.OpenInEditorCommand}"
-                                        CommandParameter="{Binding FolderPath}"
+                                        CommandParameter="{Binding}"
                                         Margin="5">
                                     <material:MaterialIconExt Kind="Code"/>
                                 </Button>
@@ -59,7 +78,7 @@
                                         Width="32" Height="32" 
                                         ToolTip.Tip="Запустить проект"
                                         Command="{x:Static vm:MainWindow.RunBatchCommand}"
-                                        CommandParameter="{Binding FolderPath}"
+                                        CommandParameter="{Binding}"
                                         Margin="5">
                                     <material:MaterialIconExt Kind="Play"/>
                                 </Button>
@@ -71,7 +90,22 @@
                 <DataGridTextColumn Header="Название проекта" Binding="{Binding Name}" />
                 <DataGridTextColumn Header="Описание" Binding="{Binding Description}" />
                 <DataGridTextColumn Header="Статус" Binding="{Binding Status}" />
-                <DataGridTextColumn Header="Папка" Binding="{Binding FolderPath}" />
+                <DataGridTemplateColumn Header="Тип">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Language}" VerticalAlignment="Center" Margin="5,0"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                    <DataGridTemplateColumn.CellEditingTemplate>
+                        <DataTemplate>
+                            <ComboBox ItemsSource="{x:Static vm:MainWindow.AvailableLanguages}" 
+                                      SelectedItem="{Binding Language}" 
+                                      HorizontalAlignment="Stretch"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellEditingTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTextColumn Header="Последнее взаимодействие" Binding="{Binding LastInteractionDisplay}" IsReadOnly="True" />
+                <DataGridTextColumn Header="Директория" Binding="{Binding FolderPath}" />
                 
             </DataGrid.Columns>
         </DataGrid>
