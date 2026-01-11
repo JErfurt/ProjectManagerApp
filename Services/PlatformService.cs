@@ -9,7 +9,11 @@ using MsBox.Avalonia.Enums;
 namespace ProjectManagerApp.Services
 {
     public static class PlatformService
-    {
+    {        
+        public static bool IsWindows => RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+        public static bool IsLinux   => RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
+        public static bool IsMacOS   => RuntimeInformation.IsOSPlatform(OSPlatform.OSX);
+
         /// <summary>
         /// Открывает папку в файловом менеджере операционной системы
         /// </summary>
@@ -27,7 +31,7 @@ namespace ProjectManagerApp.Services
 
             try
             {
-                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                if (IsWindows)
                 {
                     // Windows - используем explorer
                     Process.Start(new ProcessStartInfo
@@ -37,12 +41,12 @@ namespace ProjectManagerApp.Services
                         UseShellExecute = true
                     });
                 }
-                else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+                else if (IsMacOS)
                 {
                     // macOS - используем open
                     Process.Start("open", folderPath);
                 }
-                else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+                else if (IsLinux)
                 {
                     // Linux - пробуем разные файловые менеджеры
                     if (IsCommandAvailable("xdg-open"))
