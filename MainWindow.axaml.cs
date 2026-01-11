@@ -16,6 +16,7 @@ namespace ProjectManagerApp
         public ObservableCollection<Project> Projects { get; set; }
         public Project? SelectedProject { get; set; } // Добавлено свойство SelectedProject
         public static ICommand? OpenFolderCommand { get; private set; }
+        public static ICommand? OpenInEditorCommand { get; private set; }
         public ICommand RemoveProjectCommand { get; private set; }
         public static ICommand? RunBatchCommand { get; private set; }
 
@@ -26,10 +27,11 @@ namespace ProjectManagerApp
             Projects = new ObservableCollection<Project>(ProjectService.LoadProjects());
             DataContext = this;
 
-                    // Команды
-        OpenFolderCommand = new RelayCommand<string>(async (path) => await PlatformService.OpenFolderAsync(path));
-        RemoveProjectCommand = new RelayCommand<Project>(RemoveProject);
-        RunBatchCommand = new RelayCommand<string>(async (path) => await PlatformService.RunScriptAsync(path));
+            // Команды
+            OpenFolderCommand = new RelayCommand<string>(async (path) => await PlatformService.OpenFolderAsync(path));
+            OpenInEditorCommand = new RelayCommand<string>(async (path) => await CodeEditorService.OpenFolderInCodeEditor(path));
+            RemoveProjectCommand = new RelayCommand<Project>(RemoveProject);
+            RunBatchCommand = new RelayCommand<string>(async (path) => await PlatformService.RunScriptAsync(path));
         }
 
         #region Public Methods

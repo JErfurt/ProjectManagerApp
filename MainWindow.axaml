@@ -35,26 +35,35 @@
             </DataGrid.ContextMenu>
 
             <DataGrid.Columns>
-                <DataGridTemplateColumn Header="Открыть папку">
+                <DataGridTemplateColumn Header="Действия">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
-                            <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <Button Content="Открыть"
+                                        Width="32" Height="32" 
+                                        ToolTip.Tip="Открыть папку с проектом"
                                         Command="{x:Static vm:MainWindow.OpenFolderCommand}"
-                                        CommandParameter="{Binding FolderPath}" />
-                            </Grid>
-                        </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                </DataGridTemplateColumn>
-
-                <!-- Новая колонка для запуска -->
-                <DataGridTemplateColumn Header="Запуск">
-                    <DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <Button Content="Запустить"
-                                    Command="{x:Static vm:MainWindow.RunBatchCommand}"
-                                    CommandParameter="{Binding FolderPath}"
-                                    Margin="5"/>
+                                        CommandParameter="{Binding FolderPath}" 
+                                        Margin="5">
+                                    <material:MaterialIconExt Kind="FolderOpen"/>
+                                </Button>
+                                <Button Content="Открыть в редакторе"
+                                        Width="32" Height="32"
+                                        ToolTip.Tip="Открыть проект в редакторе"
+                                        Command="{x:Static vm:MainWindow.OpenInEditorCommand}"
+                                        CommandParameter="{Binding FolderPath}"
+                                        Margin="5">
+                                    <material:MaterialIconExt Kind="Code"/>
+                                </Button>
+                                <Button Content="Запустить"
+                                        Width="32" Height="32" 
+                                        ToolTip.Tip="Запустить проект"
+                                        Command="{x:Static vm:MainWindow.RunBatchCommand}"
+                                        CommandParameter="{Binding FolderPath}"
+                                        Margin="5">
+                                    <material:MaterialIconExt Kind="Play"/>
+                                </Button>
+                            </StackPanel>
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
