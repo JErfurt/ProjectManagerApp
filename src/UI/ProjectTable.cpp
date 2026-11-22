@@ -1,9 +1,9 @@
 #include "UI/ProjectTable.hpp"
 
 #include <FL/Fl.H>
+#include <FL/Fl_Window.H>
 #include <FL/Fl_Menu_Item.H>
 #include <FL/Fl_Multi_Label.H>
-#include <FL/Fl_Tooltip.H>
 #include <FL/fl_draw.H>
 
 #include <algorithm>
@@ -16,7 +16,6 @@ namespace ProjectManager {
 namespace {
 
 constexpr const char* kColumnHeaders[] = {
-    "Действия",
     "Название",
     "Описание",
     "Статус",
@@ -26,23 +25,12 @@ constexpr const char* kColumnHeaders[] = {
 };
 
 constexpr int kInitialColWidths[] = {
-    120, // Действия
     180, // Название проекта
     270, // Описание
     120, // Статус
     115, // Тип
     175, // Последнее взаимодействие
     240  // Директория
-};
-
-constexpr int kActionBtnSize = 28;
-constexpr int kActionBtnGap = 6;
-constexpr int kIconSize = 16;
-
-constexpr const char* kActionTooltips[] = {
-    "Открыть папку с проектом",
-    "Открыть проект в редакторе",
-    "Запустить проект"
 };
 
 } // namespace
@@ -136,8 +124,6 @@ void ProjectTable::setProjects(std::vector<Project*> visibleProjects) {
 
     cancelEdit();
     clearHover();
-    pressedRow_ = -1;
-    pressedAction_ = -1;
 
     projects_ = std::move(visibleProjects);
     rows(static_cast<int>(projects_.size()));
@@ -324,6 +310,11 @@ void ProjectTable::commitEdit() {
     editRow_ = -1;
     editCol_ = -1;
     editInput_->hide();
+    // Поле ввода прячет курсор на время набора. Таблица помнит прошлый
+    // курсор и после скрытия поля сама его не возвращает.
+    if (Fl_Window* top = window()) {
+        top->cursor(FL_CURSOR_ARROW);
+    }
 
     if (row >= 0 && row < static_cast<int>(projects_.size())) {
         Project* p = projects_[static_cast<std::size_t>(row)];
@@ -360,6 +351,9 @@ void ProjectTable::cancelEdit() {
     editRow_ = -1;
     editCol_ = -1;
     editInput_->hide();
+    if (Fl_Window* top = window()) {
+        top->cursor(FL_CURSOR_ARROW);
+    }
     take_focus();
     redraw();
 }
@@ -524,88 +518,30 @@ void ProjectTable::openContextMenu(int row, int menuX, int menuY) {
     }
 }
 
-void ProjectTable::actionButtonRect(int cellX, int cellY, int cellW, int cellH, int actionIdx,
-                                    int& bx, int& by, int& bw, int& bh) const {
-    constexpr int totalW = 3 * kActionBtnSize + 2 * kActionBtnGap;
-    int startX = cellX + (cellW - totalW) / 2;
-    int startY = cellY + (cellH - kActionBtnSize) / 2;
-
-    bx = startX + actionIdx * (kActionBtnSize + kActionBtnGap);
-    by = startY;
-    bw = kActionBtnSize;
-    bh = kActionBtnSize;
-}
-
-bool ProjectTable::hitTestActionButton(int row, int mouseX, int mouseY, int& outAction) const {
-    outAction = -1;
-    if (row < 0 || row >= static_cast<int>(projects_.size())) return false;
-
-    int X = 0, Y = 0, W = 0, H = 0;
-    const_cast<ProjectTable*>(this)->find_cell(CONTEXT_CELL, row, static_cast<int>(Column::Actions), X, Y, W, H);
-
-    for (int i = 0; i < 3; ++i) {
-        int bx = 0, by = 0, bw = 0, bh = 0;
-        actionButtonRect(X, Y, W, H, i, bx, by, bw, bh);
-        if (mouseX >= bx && mouseX < bx + bw && mouseY >= by && mouseY < by + bh) {
-            outAction = i;
-            return true;
-        }
-    }
-    return false;
-}
-
-void ProjectTable::updateHover(int row, int col, int mouseX, int mouseY) {
-    int newAction = -1;
-    if (row >= 0 && col == static_cast<int>(Column::Actions)) {
-        hitTestActionButton(row, mouseX, mouseY, newAction);
-    }
-
-    if (row == hoverRow_ && col == hoverCol_ && newAction == hoverAction_) {
-        return;
-    }
+void ProjectTable::updateHover(int row, int col) {
+    if (row == hoverRow_ && col == hoverCol_) return;
 
     int oldRow = hoverRow_;
     int oldCol = hoverCol_;
-    int oldAction = hoverAction_;
     hoverRow_ = row;
     hoverCol_ = col;
-    hoverAction_ = newAction;
 
-    if (hoverAction_ >= 0 && hoverAction_ < 3) {
-        int cx = 0, cy = 0, cw = 0, ch = 0;
-        find_cell(CONTEXT_CELL, hoverRow_, static_cast<int>(Column::Actions), cx, cy, cw, ch);
-        int bx = 0, by = 0, bw = 0, bh = 0;
-        actionButtonRect(cx, cy, cw, ch, hoverAction_, bx, by, bw, bh);
-        Fl_Tooltip::enter_area(this, bx - x(), by - y(), bw, bh, kActionTooltips[hoverAction_]);
-    } else {
-        Fl_Tooltip::exit(this);
-    }
-
-    auto cellUsesHover = [](int c, int act) {
-        return (c == static_cast<int>(Column::Actions) && act >= 0) ||
-               c == static_cast<int>(Column::Language);
-    };
-
-    if (oldRow >= 0 && oldRow < rows() && oldCol >= 0 && cellUsesHover(oldCol, oldAction)) {
+    auto isLanguage = [](int c) { return c == static_cast<int>(Column::Language); };
+    if (oldRow >= 0 && oldRow < rows() && isLanguage(oldCol)) {
         redraw_range(oldRow, oldRow, oldCol, oldCol);
     }
-    if (hoverRow_ >= 0 && hoverRow_ < rows() && hoverCol_ >= 0 && cellUsesHover(hoverCol_, hoverAction_)) {
+    if (hoverRow_ >= 0 && hoverRow_ < rows() && isLanguage(hoverCol_)) {
         redraw_range(hoverRow_, hoverRow_, hoverCol_, hoverCol_);
     }
 }
 
 void ProjectTable::clearHover() {
-    if (hoverRow_ == -1 && hoverCol_ == -1 && hoverAction_ == -1) return;
+    if (hoverRow_ == -1 && hoverCol_ == -1) return;
     int oldRow = hoverRow_;
     int oldCol = hoverCol_;
-    int oldAction = hoverAction_;
     hoverRow_ = -1;
     hoverCol_ = -1;
-    hoverAction_ = -1;
-    Fl_Tooltip::exit(this);
-    if (oldRow >= 0 && oldRow < rows() && oldCol >= 0 &&
-        ((oldCol == static_cast<int>(Column::Actions) && oldAction >= 0) ||
-         oldCol == static_cast<int>(Column::Language))) {
+    if (oldRow >= 0 && oldRow < rows() && oldCol == static_cast<int>(Column::Language)) {
         redraw_range(oldRow, oldRow, oldCol, oldCol);
     }
 }
@@ -631,7 +567,7 @@ void ProjectTable::draw_cell(TableContext context, int R, int C, int X, int Y, i
 
         case CONTEXT_COL_HEADER: {
             fl_push_clip(X, Y, W, H);
-            bool sortable = C > static_cast<int>(Column::Actions) && C < static_cast<int>(Column::Count);
+            bool sortable = C >= 0 && C < static_cast<int>(Column::Count);
             bool headerHot = sortable && C == hoverHeaderCol_;
             fl_color(headerHot ? theme_.buttonHoverBg : theme_.headerBg);
             fl_rectf(X, Y, W, H);
@@ -645,10 +581,8 @@ void ProjectTable::draw_cell(TableContext context, int R, int C, int X, int Y, i
             if (C >= 0 && C < static_cast<int>(Column::Count)) {
                 bool sorted = C == sortColumn_;
                 int rightPad = sorted ? 22 : 8;
-                Fl_Align align = (C == static_cast<int>(Column::Actions))
-                                     ? (FL_ALIGN_CENTER | FL_ALIGN_INSIDE | FL_ALIGN_CLIP)
-                                     : (FL_ALIGN_LEFT | FL_ALIGN_INSIDE | FL_ALIGN_CLIP);
-                fl_draw(kColumnHeaders[C], X + 8, Y, std::max(0, W - 8 - rightPad), H, align);
+                fl_draw(kColumnHeaders[C], X + 8, Y, std::max(0, W - 8 - rightPad), H,
+                        FL_ALIGN_LEFT | FL_ALIGN_INSIDE | FL_ALIGN_CLIP);
 
                 if (sorted && W > 28) {
                     int ax = X + W - 16;
@@ -690,60 +624,34 @@ void ProjectTable::draw_cell(TableContext context, int R, int C, int X, int Y, i
             fl_line(X + W - 1, Y, X + W - 1, Y + H - 1);
             fl_line(X, Y + H - 1, X + W - 1, Y + H - 1);
 
-            if (C == static_cast<int>(Column::Actions)) {
-                Fl_SVG_Image* imgs[3] = {icons_.folder(), icons_.code(), icons_.play()};
-                for (int i = 0; i < 3; ++i) {
-                    int bx = 0, by = 0, bw = 0, bh = 0;
-                    actionButtonRect(X, Y, W, H, i, bx, by, bw, bh);
+            std::string text;
+            bool isMuted = false;
+            switch (static_cast<Column>(C)) {
+                case Column::Name:            text = p->name; break;
+                case Column::Description:     text = p->description; break;
+                case Column::Status:          text = p->status; break;
+                case Column::Language:        text = p->language; break;
+                case Column::LastInteraction:
+                    text = p->lastInteractionDisplay();
+                    isMuted = p->lastInteractionIso.empty();
+                    break;
+                case Column::FolderPath:      text = p->folderPath; break;
+                default: break;
+            }
 
-                    bool isPressed = (R == pressedRow_ && i == pressedAction_);
-                    bool isHovered = (R == hoverRow_ && i == hoverAction_);
+            fl_font(FL_HELVETICA, 14);
+            fl_color(selected ? theme_.selectionText : (isMuted ? theme_.mutedText : theme_.text));
 
-                    Fl_Color btnBg = isPressed ? theme_.buttonActiveBg
-                                               : (isHovered ? theme_.buttonHoverBg : theme_.buttonBg);
-                    fl_color(btnBg);
-                    fl_rectf(bx, by, bw, bh);
+            int rightPad = (C == static_cast<int>(Column::Language)) ? 22 : 8;
+            fl_draw(text.c_str(), X + 8, Y, std::max(0, W - 8 - rightPad), H,
+                    FL_ALIGN_LEFT | FL_ALIGN_INSIDE | FL_ALIGN_CLIP);
 
-                    fl_color(isHovered ? theme_.separator : theme_.buttonBorder);
-                    fl_rect(bx, by, bw, bh);
-
-                    if (imgs[i]) {
-                        int ix = bx + (bw - kIconSize) / 2;
-                        int iy = by + (bh - kIconSize) / 2;
-                        imgs[i]->draw(ix, iy);
-                    }
-                }
-            } else {
-                std::string text;
-                bool isMuted = false;
-                switch (static_cast<Column>(C)) {
-                    case Column::Name:            text = p->name; break;
-                    case Column::Description:     text = p->description; break;
-                    case Column::Status:          text = p->status; break;
-                    case Column::Language:        text = p->language; break;
-                    case Column::LastInteraction:
-                        text = p->lastInteractionDisplay();
-                        isMuted = p->lastInteractionIso.empty();
-                        break;
-                    case Column::FolderPath:      text = p->folderPath; break;
-                    default: break;
-                }
-
-                fl_font(FL_HELVETICA, 14);
-                fl_color(selected ? theme_.selectionText : (isMuted ? theme_.mutedText : theme_.text));
-
-                int rightPad = (C == static_cast<int>(Column::Language)) ? 22 : 8;
-                fl_draw(text.c_str(), X + 8, Y, std::max(0, W - 8 - rightPad), H,
-                        FL_ALIGN_LEFT | FL_ALIGN_INSIDE | FL_ALIGN_CLIP);
-
-                // Subtle dropdown arrow on Language column when hovered or row selected
-                if (C == static_cast<int>(Column::Language) &&
-                    (selected || (R == hoverRow_ && C == hoverCol_))) {
-                    int ax = X + W - 14;
-                    int ay = Y + H / 2 - 2;
-                    fl_color(selected ? theme_.selectionText : theme_.mutedText);
-                    fl_polygon(ax, ay, ax + 8, ay, ax + 4, ay + 5);
-                }
+            if (C == static_cast<int>(Column::Language) &&
+                (selected || (R == hoverRow_ && C == hoverCol_))) {
+                int ax = X + W - 14;
+                int ay = Y + H / 2 - 2;
+                fl_color(selected ? theme_.selectionText : theme_.mutedText);
+                fl_polygon(ax, ay, ax + 8, ay, ax + 4, ay + 5);
             }
 
             fl_pop_clip();
@@ -767,7 +675,7 @@ int ProjectTable::handle(int event) {
             TableContext ctx = cursor2rowcol(R, C, rf);
             int newHeader = -1;
             if (ctx == CONTEXT_COL_HEADER && rf == RESIZE_NONE &&
-                C > static_cast<int>(Column::Actions)) {
+                C >= 0 && C < static_cast<int>(Column::Count)) {
                 newHeader = C;
             }
             if (newHeader != hoverHeaderCol_) {
@@ -775,7 +683,7 @@ int ProjectTable::handle(int event) {
                 redraw();
             }
             if (ctx == CONTEXT_CELL && rf == RESIZE_NONE && R >= 0 && R < rows()) {
-                updateHover(R, C, Fl::event_x(), Fl::event_y());
+                updateHover(R, C);
             } else {
                 clearHover();
             }
@@ -806,7 +714,7 @@ int ProjectTable::handle(int event) {
                     if (editing_) {
                         commitEdit();
                     }
-                    if (C > static_cast<int>(Column::Actions)) {
+                    if (C >= 0 && C < static_cast<int>(Column::Count)) {
                         headerPressCol_ = C;
                         headerPressX_ = Fl::event_x();
                         headerPressY_ = Fl::event_y();
@@ -833,17 +741,7 @@ int ProjectTable::handle(int event) {
 
                 if (Fl::event_button() == FL_LEFT_MOUSE) {
                     take_focus();
-                    if (C == static_cast<int>(Column::Actions)) {
-                        int actionIdx = -1;
-                        if (hitTestActionButton(R, Fl::event_x(), Fl::event_y(), actionIdx)) {
-                            select_all_rows(0);
-                            select_row(R, 1);
-                            pressedRow_ = R;
-                            pressedAction_ = actionIdx;
-                            redraw_range(R, R, 0, 0);
-                            return 1;
-                        }
-                    } else if (C == static_cast<int>(Column::Language)) {
+                    if (C == static_cast<int>(Column::Language)) {
                         bool wasSelected = row_selected(R) != 0;
                         select_all_rows(0);
                         select_row(R, 1);
@@ -871,27 +769,6 @@ int ProjectTable::handle(int event) {
                 int dy = std::abs(Fl::event_y() - headerPressY_);
                 if (dx < 5 && dy < 5 && onHeaderClicked) {
                     onHeaderClicked(col);
-                }
-                return 1;
-            }
-
-            if (pressedAction_ >= 0) {
-                int pRow = pressedRow_;
-                int pAct = pressedAction_;
-                pressedRow_ = -1;
-                pressedAction_ = -1;
-                if (pRow >= 0 && pRow < rows()) {
-                    redraw_range(pRow, pRow, 0, 0);
-                }
-
-                int hitAction = -1;
-                if (pRow >= 0 && pRow < static_cast<int>(projects_.size()) &&
-                    hitTestActionButton(pRow, Fl::event_x(), Fl::event_y(), hitAction) &&
-                    hitAction == pAct) {
-                    int projectId = projects_[static_cast<std::size_t>(pRow)]->id;
-                    if (onAction) {
-                        onAction(projectId, static_cast<Action>(pAct));
-                    }
                 }
                 return 1;
             }
@@ -952,7 +829,8 @@ int ProjectTable::handle(int event) {
         int R = 0, C = 0;
         ResizeFlag rf = RESIZE_NONE;
         TableContext ctx = cursor2rowcol(R, C, rf);
-        if (ctx == CONTEXT_COL_HEADER && rf == RESIZE_NONE && C > static_cast<int>(Column::Actions)) {
+        if (ctx == CONTEXT_COL_HEADER && rf == RESIZE_NONE &&
+            C >= 0 && C < static_cast<int>(Column::Count)) {
             fl_cursor(FL_CURSOR_HAND);
         }
     }

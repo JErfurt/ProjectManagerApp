@@ -6,6 +6,7 @@
 #include <fstream>
 #include <sstream>
 #include <cstdlib>
+#include <vector>
 
 namespace ProjectManager {
 
@@ -42,27 +43,34 @@ bool parseInt(const std::string& text, int& out) {
     return true;
 }
 
-bool parseColumnWidths(const std::string& text, int* widths) {
-    int parsed[kSettingsColumnCount];
+bool parseColumnWidths(const std::string& text, int* widths, bool& droppedActionsColumn) {
+    droppedActionsColumn = false;
+    std::vector<int> parsed;
     std::size_t start = 0;
-    for (int i = 0; i < kSettingsColumnCount; ++i) {
+    while (start <= text.size()) {
         std::size_t comma = text.find(',', start);
         std::string token = text.substr(start, comma == std::string::npos ? std::string::npos : comma - start);
         int value = 0;
-        if (!parseInt(token, value) || value < 40 || value > 4000) {
-            return false;
-        }
-        parsed[i] = value;
-        if (comma == std::string::npos) {
-            if (i != kSettingsColumnCount - 1) return false;
-            for (int n = 0; n < kSettingsColumnCount; ++n) {
-                widths[n] = parsed[n];
-            }
-            return true;
-        }
+        if (!parseInt(token, value) || value < 40 || value > 4000) return false;
+        parsed.push_back(value);
+        if (comma == std::string::npos) break;
         start = comma + 1;
+        if (start >= text.size()) return false;
     }
-    return false;
+
+    int offset = 0;
+    if (static_cast<int>(parsed.size()) == kSettingsColumnCount + 1) {
+        // Раньше первым столбцом были кнопки действий.
+        offset = 1;
+        droppedActionsColumn = true;
+    } else if (static_cast<int>(parsed.size()) != kSettingsColumnCount) {
+        return false;
+    }
+
+    for (int i = 0; i < kSettingsColumnCount; ++i) {
+        widths[i] = parsed[static_cast<std::size_t>(i + offset)];
+    }
+    return true;
 }
 
 } // namespace
@@ -80,6 +88,7 @@ AppSettings SettingsService::load() {
     bool hasY = false;
     bool hasW = false;
     bool hasH = false;
+    bool droppedActionsColumn = false;
 
     std::string line;
     while (std::getline(in, line)) {
@@ -102,7 +111,7 @@ AppSettings SettingsService::load() {
         } else if (key == "window_h") {
             hasH = parseInt(value, settings.windowH);
         } else if (key == "columns") {
-            settings.hasColumnWidths = parseColumnWidths(value, settings.columnWidths);
+            settings.hasColumnWidths = parseColumnWidths(value, settings.columnWidths, droppedActionsColumn);
         } else if (key == "editor") {
             settings.codeEditorPath = value;
         } else if (key == "sort_column") {
@@ -122,7 +131,10 @@ AppSettings SettingsService::load() {
         settings.windowH = 600;
     }
 
-    if (settings.sortColumn < 1 || settings.sortColumn >= kSettingsColumnCount) {
+    if (droppedActionsColumn && settings.sortColumn > 0) {
+        settings.sortColumn -= 1;
+    }
+    if (settings.sortColumn < 0 || settings.sortColumn >= kSettingsColumnCount) {
         settings.sortColumn = -1;
     }
     return settings;

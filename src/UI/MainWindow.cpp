@@ -5,9 +5,12 @@
 #include "Services/ProjectService.hpp"
 
 #include <FL/Fl.H>
+#include <FL/Fl_Box.H>
+#include <FL/Fl_Button.H>
 #include <FL/Fl_Input.H>
 #include <FL/Fl_Native_File_Chooser.H>
 #include <FL/Fl_Return_Button.H>
+#include <FL/Fl_Window.H>
 #include <FL/x.H>
 
 #include <algorithm>
@@ -222,6 +225,75 @@ bool editCodeEditorPath(const Theme& theme, Fl_Window* parent, std::string& path
     if (!state.accepted) return false;
     path = state.input->value() ? state.input->value() : "";
     return true;
+}
+
+bool confirmDeletion(const Theme& theme, Fl_Window* parent, const std::string& message) {
+    struct State {
+        bool accepted = false;
+    } state;
+
+    class Dialog : public Fl_Window {
+    public:
+        using Fl_Window::Fl_Window;
+
+        int handle(int event) override {
+            if (event == FL_KEYBOARD) {
+                const int key = Fl::event_key();
+                if (key == FL_Enter || key == FL_KP_Enter) {
+                    if (auto* button = dynamic_cast<Fl_Button*>(Fl::focus())) {
+                        if (button->window() == this) {
+                            button->do_callback();
+                            return 1;
+                        }
+                    }
+                }
+            }
+            return Fl_Window::handle(event);
+        }
+    };
+
+    Dialog dlg(440, 148, "Удаление проекта");
+    dlg.color(theme.windowBg);
+    dlg.set_modal();
+    dlg.callback([](Fl_Widget* w, void*) { w->hide(); });
+
+    auto* text = new Fl_Box(16, 16, 408, 68);
+    text->copy_label(message.c_str());
+    text->align(FL_ALIGN_LEFT | FL_ALIGN_TOP | FL_ALIGN_INSIDE | FL_ALIGN_WRAP);
+    text->labelsize(14);
+    text->labelcolor(theme.text);
+    text->box(FL_NO_BOX);
+
+    auto* removeBtn = new Fl_Button(212, 100, 100, 32, "Удалить");
+    removeBtn->labelsize(14);
+    removeBtn->labelcolor(theme.text);
+    removeBtn->color(theme.buttonBg);
+    removeBtn->callback([](Fl_Widget* w, void* data) {
+        static_cast<State*>(data)->accepted = true;
+        if (w->window()) w->window()->hide();
+    }, &state);
+
+    auto* cancelBtn = new Fl_Button(324, 100, 100, 32, "Отмена");
+    cancelBtn->labelsize(14);
+    cancelBtn->labelcolor(theme.text);
+    cancelBtn->color(theme.buttonBg);
+    cancelBtn->callback([](Fl_Widget* w, void*) {
+        if (w->window()) w->window()->hide();
+    });
+
+    dlg.end();
+    if (parent) {
+        dlg.position(
+            parent->x() + (parent->w() - dlg.w()) / 2,
+            parent->y() + (parent->h() - dlg.h()) / 2
+        );
+    }
+    dlg.show();
+    removeBtn->take_focus();
+    while (dlg.shown()) {
+        Fl::wait();
+    }
+    return state.accepted;
 }
 
 } // namespace
@@ -549,8 +621,7 @@ void MainWindow::onAddProject() {
 }
 
 void MainWindow::onSortColumn(int column) {
-    if (column <= static_cast<int>(ProjectTable::Column::Actions) ||
-        column >= static_cast<int>(ProjectTable::Column::Count)) {
+    if (column < 0 || column >= static_cast<int>(ProjectTable::Column::Count)) {
         return;
     }
     if (settings_.sortColumn == column) {
@@ -565,7 +636,7 @@ void MainWindow::onSortColumn(int column) {
 }
 
 std::function<bool(const Project*, const Project*)> MainWindow::makeSortLess() const {
-    if (settings_.sortColumn < 1 || settings_.sortColumn >= static_cast<int>(ProjectTable::Column::Count)) {
+    if (settings_.sortColumn < 0 || settings_.sortColumn >= static_cast<int>(ProjectTable::Column::Count)) {
         return {};
     }
     const int column = settings_.sortColumn;
@@ -639,6 +710,16 @@ void MainWindow::onTableCellEdited(int projectId, ProjectTable::Column col, cons
 }
 
 void MainWindow::onDeleteProject(int projectId) {
+    Project* project = findProjectById(projectId);
+    if (!project) return;
+
+    const std::string name = project->name.empty() ? "этот проект" : project->name;
+    const std::string message = "Удалить проект \"" + name + "\"?";
+    if (!confirmDeletion(theme_, this, message)) {
+        if (table_) table_->take_focus();
+        return;
+    }
+
     ProjectService::deleteProject(projectId);
 
     allProjects_.erase(
@@ -648,6 +729,7 @@ void MainWindow::onDeleteProject(int projectId) {
     );
 
     applyFilter();
+    if (table_) table_->take_focus();
 }
 
 void MainWindow::cbOpenConfigFolder(Fl_Widget*, void* userData) {

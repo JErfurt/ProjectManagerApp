@@ -15,14 +15,13 @@ namespace ProjectManager {
 class ProjectTable : public Fl_Table_Row {
 public:
     enum class Column {
-        Actions = 0,
-        Name = 1,
-        Description = 2,
-        Status = 3,
-        Language = 4,
-        LastInteraction = 5,
-        FolderPath = 6,
-        Count = 7
+        Name = 0,
+        Description = 1,
+        Status = 2,
+        Language = 3,
+        LastInteraction = 4,
+        FolderPath = 5,
+        Count = 6
     };
 
     enum class Action {
@@ -71,10 +70,7 @@ private:
     void moveSelectionBy(int delta);
     void moveSelectionPage(int direction);
 
-    bool hitTestActionButton(int row, int mouseX, int mouseY, int& outAction) const;
-    void actionButtonRect(int cellX, int cellY, int cellW, int cellH, int actionIdx,
-                          int& bx, int& by, int& bw, int& bh) const;
-    void updateHover(int row, int col, int mouseX, int mouseY);
+    void updateHover(int row, int col);
     void clearHover();
     void rememberColumnWidths();
     void notifyColumnWidthsChanged();
@@ -90,10 +86,7 @@ private:
 
     int hoverRow_ = -1;
     int hoverCol_ = -1;
-    int hoverAction_ = -1;
     int hoverHeaderCol_ = -1;
-    int pressedRow_ = -1;
-    int pressedAction_ = -1;
 
     int headerPressCol_ = -1;
     int headerPressX_ = 0;
