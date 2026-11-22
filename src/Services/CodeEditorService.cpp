@@ -1,5 +1,6 @@
 #include "Services/CodeEditorService.hpp"
 #include "Services/PlatformService.hpp"
+#include "Services/SettingsService.hpp"
 
 #include <cstdlib>
 #include <vector>
@@ -96,6 +97,31 @@ bool spawnDetachedEditor(const std::vector<std::string>& args) {
 
 void CodeEditorService::openFolderInCodeEditor(const std::string& folderPath) {
     if (folderPath.empty()) return;
+
+    const std::string customEditor = PlatformService::trim(SettingsService::load().codeEditorPath);
+    if (!customEditor.empty()) {
+        if (!PlatformService::fileExists(customEditor)) {
+            PlatformService::showError(
+                "Редактор кода",
+                "Указанный редактор не найден. Проверьте путь в настройках."
+            );
+            return;
+        }
+#if defined(_WIN32)
+        std::wstring exe = PlatformService::utf8ToWide(customEditor);
+        std::wstring folderW = PlatformService::utf8ToWide(folderPath);
+        std::wstring args = L"\"" + folderW + L"\"";
+        HINSTANCE res = ShellExecuteW(nullptr, L"open", exe.c_str(), args.c_str(), nullptr, SW_SHOWNORMAL);
+        if (reinterpret_cast<INT_PTR>(res) <= 32) {
+            PlatformService::showError("Редактор кода", "Не удалось запустить редактор.");
+        }
+#else
+        if (!spawnDetachedEditor({customEditor, folderPath})) {
+            PlatformService::showError("Редактор кода", "Не удалось запустить редактор.");
+        }
+#endif
+        return;
+    }
 
 #if defined(_WIN32)
     std::wstring folderW = PlatformService::utf8ToWide(folderPath);

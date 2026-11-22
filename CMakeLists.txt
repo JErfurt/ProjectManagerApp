@@ -104,6 +104,8 @@ set(APP_SOURCES
     src/Services/CodeEditorService.cpp
     src/Services/ProjectService.hpp
     src/Services/ProjectService.cpp
+    src/Services/SettingsService.hpp
+    src/Services/SettingsService.cpp
     src/UI/Theme.hpp
     src/UI/Icons.hpp
     src/UI/Icons.cpp

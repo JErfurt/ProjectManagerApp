@@ -213,23 +213,16 @@ inline std::string formatTimestampLocalDisplay(const std::string& iso) {
         return iso;
     }
 
-    int offsetSec = computeLocalOffsetSeconds(utcTime, localTm);
-    char sign = offsetSec >= 0 ? '+' : '-';
-    int absOff = offsetSec >= 0 ? offsetSec : -offsetSec;
-    int offH = absOff / 3600;
-    int offM = (absOff % 3600) / 60;
-
     char buf[64];
     std::snprintf(
         buf, sizeof(buf),
-        "%02d.%02d.%04d %02d:%02d:%02d %c%02d:%02d",
+        "%02d.%02d.%04d %02d:%02d:%02d",
         localTm.tm_mday,
         localTm.tm_mon + 1,
         localTm.tm_year + 1900,
         localTm.tm_hour,
         localTm.tm_min,
-        localTm.tm_sec,
-        sign, offH, offM
+        localTm.tm_sec
     );
     return buf;
 }

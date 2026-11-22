@@ -6,6 +6,7 @@
 #include <FL/fl_draw.H>
 
 #include <algorithm>
+#include <cstdlib>
 #include <cstdint>
 #include <string>
 
@@ -29,7 +30,7 @@ constexpr int kInitialColWidths[] = {
     270, // Описание
     120, // Статус
     115, // Тип
-    195, // Последнее взаимодействие
+    175, // Последнее взаимодействие
     240  // Директория
 };
 
@@ -104,6 +105,7 @@ ProjectTable::ProjectTable(int X, int Y, int W, int H, const Theme& theme, const
     for (int c = 0; c < static_cast<int>(Column::Count); ++c) {
         col_width(c, kInitialColWidths[c]);
     }
+    rememberColumnWidths();
 
     // Inline editor child widget
     editInput_ = new CellInput(0, 0, 100, 30, this);
@@ -136,6 +138,68 @@ void ProjectTable::appendVisibleProject(Project* project) {
     rows(static_cast<int>(projects_.size()));
     row_height(rows() - 1, 38);
     selectAndScrollToRow(rows() - 1);
+}
+
+int ProjectTable::findRowByProjectId(int projectId) const {
+    for (int i = 0; i < static_cast<int>(projects_.size()); ++i) {
+        if (projects_[static_cast<std::size_t>(i)]->id == projectId) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+void ProjectTable::setColumnWidths(const int* widths) {
+    if (!widths) return;
+    for (int c = 0; c < static_cast<int>(Column::Count); ++c) {
+        int width = std::max(60, widths[c]);
+        col_width(c, width);
+    }
+    rememberColumnWidths();
+    redraw();
+}
+
+void ProjectTable::copyColumnWidths(int* widths) {
+    if (!widths) return;
+    for (int c = 0; c < static_cast<int>(Column::Count); ++c) {
+        widths[c] = col_width(c);
+    }
+}
+
+void ProjectTable::setSortIndicator(int column, bool ascending) {
+    sortColumn_ = column;
+    sortAscending_ = ascending;
+    redraw();
+}
+
+void ProjectTable::sortCurrent(const std::function<bool(const Project*, const Project*)>& less) {
+    if (!less) return;
+    if (editing_) {
+        commitEdit();
+    }
+    std::stable_sort(projects_.begin(), projects_.end(), less);
+    redraw();
+}
+
+void ProjectTable::rememberColumnWidths() {
+    for (int c = 0; c < static_cast<int>(Column::Count); ++c) {
+        lastWidths_[c] = col_width(c);
+    }
+}
+
+void ProjectTable::notifyColumnWidthsChanged() {
+    bool changed = false;
+    for (int c = 0; c < static_cast<int>(Column::Count); ++c) {
+        if (col_width(c) != lastWidths_[c]) {
+            changed = true;
+            break;
+        }
+    }
+    if (!changed) return;
+    rememberColumnWidths();
+    if (onColumnWidthsChanged) {
+        onColumnWidthsChanged();
+    }
 }
 
 void ProjectTable::selectAndScrollToRow(int row) {
@@ -451,7 +515,9 @@ void ProjectTable::draw_cell(TableContext context, int R, int C, int X, int Y, i
 
         case CONTEXT_COL_HEADER: {
             fl_push_clip(X, Y, W, H);
-            fl_color(theme_.headerBg);
+            bool sortable = C > static_cast<int>(Column::Actions) && C < static_cast<int>(Column::Count);
+            bool headerHot = sortable && C == hoverHeaderCol_;
+            fl_color(headerHot ? theme_.buttonHoverBg : theme_.headerBg);
             fl_rectf(X, Y, W, H);
 
             fl_color(theme_.gridLine);
@@ -461,10 +527,22 @@ void ProjectTable::draw_cell(TableContext context, int R, int C, int X, int Y, i
             fl_font(FL_HELVETICA_BOLD, 13);
             fl_color(theme_.text);
             if (C >= 0 && C < static_cast<int>(Column::Count)) {
+                bool sorted = C == sortColumn_;
+                int rightPad = sorted ? 22 : 8;
                 Fl_Align align = (C == static_cast<int>(Column::Actions))
                                      ? (FL_ALIGN_CENTER | FL_ALIGN_INSIDE | FL_ALIGN_CLIP)
                                      : (FL_ALIGN_LEFT | FL_ALIGN_INSIDE | FL_ALIGN_CLIP);
-                fl_draw(kColumnHeaders[C], X + 8, Y, W - 16, H, align);
+                fl_draw(kColumnHeaders[C], X + 8, Y, std::max(0, W - 8 - rightPad), H, align);
+
+                if (sorted && W > 28) {
+                    int ax = X + W - 16;
+                    int mid = Y + H / 2;
+                    if (sortAscending_) {
+                        fl_polygon(ax, mid + 3, ax + 8, mid + 3, ax + 4, mid - 4);
+                    } else {
+                        fl_polygon(ax, mid - 3, ax + 8, mid - 3, ax + 4, mid + 4);
+                    }
+                }
             }
             fl_pop_clip();
             return;
@@ -571,6 +649,15 @@ int ProjectTable::handle(int event) {
             int R = 0, C = 0;
             ResizeFlag rf = RESIZE_NONE;
             TableContext ctx = cursor2rowcol(R, C, rf);
+            int newHeader = -1;
+            if (ctx == CONTEXT_COL_HEADER && rf == RESIZE_NONE &&
+                C > static_cast<int>(Column::Actions)) {
+                newHeader = C;
+            }
+            if (newHeader != hoverHeaderCol_) {
+                hoverHeaderCol_ = newHeader;
+                redraw();
+            }
             if (ctx == CONTEXT_CELL && rf == RESIZE_NONE && R >= 0 && R < rows()) {
                 updateHover(R, C, Fl::event_x(), Fl::event_y());
             } else {
@@ -580,13 +667,36 @@ int ProjectTable::handle(int event) {
         }
 
         case FL_LEAVE:
+            if (hoverHeaderCol_ != -1) {
+                hoverHeaderCol_ = -1;
+                redraw();
+            }
             clearHover();
             break;
 
         case FL_PUSH: {
+            headerPressCol_ = -1;
+
             // If clicking inside active editor input, let Fl_Table_Row route to child
             if (editing_ && Fl::event_inside(editInput_)) {
                 return Fl_Table_Row::handle(event);
+            }
+
+            {
+                int R = 0, C = 0;
+                ResizeFlag rf = RESIZE_NONE;
+                TableContext ctx = cursor2rowcol(R, C, rf);
+                if (ctx == CONTEXT_COL_HEADER && rf == RESIZE_NONE && Fl::event_button() == FL_LEFT_MOUSE) {
+                    if (editing_) {
+                        commitEdit();
+                    }
+                    if (C > static_cast<int>(Column::Actions)) {
+                        headerPressCol_ = C;
+                        headerPressX_ = Fl::event_x();
+                        headerPressY_ = Fl::event_y();
+                        return 1;
+                    }
+                }
             }
 
             if (editing_) {
@@ -638,6 +748,17 @@ int ProjectTable::handle(int event) {
         }
 
         case FL_RELEASE: {
+            if (headerPressCol_ >= 0) {
+                int col = headerPressCol_;
+                headerPressCol_ = -1;
+                int dx = std::abs(Fl::event_x() - headerPressX_);
+                int dy = std::abs(Fl::event_y() - headerPressY_);
+                if (dx < 5 && dy < 5 && onHeaderClicked) {
+                    onHeaderClicked(col);
+                }
+                return 1;
+            }
+
             if (pressedAction_ >= 0) {
                 int pRow = pressedRow_;
                 int pAct = pressedAction_;
@@ -680,7 +801,18 @@ int ProjectTable::handle(int event) {
             break;
     }
 
-    return Fl_Table_Row::handle(event);
+    int handled = Fl_Table_Row::handle(event);
+    if (event == FL_RELEASE) {
+        notifyColumnWidthsChanged();
+    } else if (event == FL_MOVE) {
+        int R = 0, C = 0;
+        ResizeFlag rf = RESIZE_NONE;
+        TableContext ctx = cursor2rowcol(R, C, rf);
+        if (ctx == CONTEXT_COL_HEADER && rf == RESIZE_NONE && C > static_cast<int>(Column::Actions)) {
+            fl_cursor(FL_CURSOR_HAND);
+        }
+    }
+    return handled;
 }
 
 } // namespace ProjectManager

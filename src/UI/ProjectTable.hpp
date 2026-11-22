@@ -39,10 +39,18 @@ public:
     void commitEdit();
     void cancelEdit();
     void selectAndScrollToRow(int row);
+    int findRowByProjectId(int projectId) const;
+
+    void setColumnWidths(const int* widths);
+    void copyColumnWidths(int* widths);
+    void setSortIndicator(int column, bool ascending);
+    void sortCurrent(const std::function<bool(const Project*, const Project*)>& less);
 
     std::function<void(int projectId, Action action)> onAction;
     std::function<void(int projectId, Column col, const std::string& newValue)> onCellEdited;
     std::function<void(int projectId)> onDeleteProject;
+    std::function<void(int column)> onHeaderClicked;
+    std::function<void()> onColumnWidthsChanged;
 
 protected:
     void draw() override;
@@ -64,6 +72,8 @@ private:
                           int& bx, int& by, int& bw, int& bh) const;
     void updateHover(int row, int col, int mouseX, int mouseY);
     void clearHover();
+    void rememberColumnWidths();
+    void notifyColumnWidthsChanged();
 
     const Theme& theme_;
     const IconSet& icons_;
@@ -77,8 +87,17 @@ private:
     int hoverRow_ = -1;
     int hoverCol_ = -1;
     int hoverAction_ = -1;
+    int hoverHeaderCol_ = -1;
     int pressedRow_ = -1;
     int pressedAction_ = -1;
+
+    int headerPressCol_ = -1;
+    int headerPressX_ = 0;
+    int headerPressY_ = 0;
+
+    int sortColumn_ = -1;
+    bool sortAscending_ = true;
+    int lastWidths_[static_cast<int>(Column::Count)] = {};
 };
 
 } // namespace ProjectManager
