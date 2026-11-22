@@ -19,9 +19,10 @@ public:
         Description = 1,
         Status = 2,
         Language = 3,
-        LastInteraction = 4,
-        FolderPath = 5,
-        Count = 6
+        Git = 4,
+        LastInteraction = 5,
+        FolderPath = 6,
+        Count = 7
     };
 
     enum class Action {
@@ -44,6 +45,8 @@ public:
     void copyColumnWidths(int* widths);
     void setSortIndicator(int column, bool ascending);
     void sortCurrent(const std::function<bool(const Project*, const Project*)>& less);
+    bool isEditing() const { return editing_; }
+    void refreshHoverTooltip();
 
     std::function<void(int projectId, Action action)> onAction;
     std::function<void(int projectId, Column col, const std::string& newValue)> onCellEdited;

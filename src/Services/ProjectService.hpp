@@ -15,6 +15,7 @@ public:
     static std::vector<Project> loadProjects();
     static int addProject(const Project& project);
     static void updateProject(const Project& project);
+    static void updateLastInteraction(int id, const std::string& iso);
     static void deleteProject(int id);
 
 private:

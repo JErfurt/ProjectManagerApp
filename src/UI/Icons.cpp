@@ -19,8 +19,51 @@ constexpr const char* kCodePath =
 constexpr const char* kPlayPath =
     "M8,5.14V19.14L19,12.14L8,5.14Z";
 
+constexpr const char* kRefreshPath =
+    "M17.65,6.35C16.2,4.9 14.21,4 12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20A8,8 0 0,0 20,12H18A6,6 0 0,1 12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6C13.66,6 15.14,6.69 16.22,7.78L13,11H20V4L17.65,6.35Z";
+
 constexpr const char* kTrashPath =
     "M9,3V4H4V6H5V19A2,2 0 0,0 7,21H17A2,2 0 0,0 19,19V6H20V4H15V3H9M7,6H17V19H7V6M9,8V17H11V8H9M13,8V17H15V8H13Z";
+
+constexpr const char* kCloudPath =
+    "M19.35,10.04C18.67,6.59 15.64,4 12,4C9.11,4 6.6,5.64 5.35,8.04C2.34,8.36 0,10.91 0,14A6,6 0 0,0 6,20H19A5,5 0 0,0 24,15C24,12.36 21.95,10.22 19.35,10.04Z";
+
+constexpr const char* kCloudCheck =
+    "M8.5,13.6 L11.2,16.2 L16.1,11.1";
+
+constexpr const char* kCloudAlert =
+    "M12,11.1 V14.2";
+
+std::unique_ptr<Fl_SVG_Image> makeCloudIcon(const std::string& color, const char* strokePath, bool alertDot) {
+    std::string svg =
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"16\" height=\"16\">"
+        "<path fill=\"" + color + "\" d=\"" + std::string(kCloudPath) + "\"/>";
+    if (strokePath && strokePath[0] != '\0') {
+        svg += "<path fill=\"none\" stroke=\"#FFFFFF\" stroke-width=\"1.8\" "
+               "stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"";
+        svg += strokePath;
+        svg += "\"/>";
+    }
+    if (alertDot) {
+        svg += "<circle cx=\"12\" cy=\"16.6\" r=\"1.05\" fill=\"#FFFFFF\"/>";
+    }
+    svg += "</svg>";
+
+    auto img = std::make_unique<Fl_SVG_Image>(nullptr, svg.c_str());
+    img->scale(16, 16, 1, 1);
+    return img;
+}
+
+std::unique_ptr<Fl_SVG_Image> makeDirtyCloud() {
+    std::string svg =
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"16\" height=\"16\">"
+        "<path fill=\"#E24B3B\" d=\"" + std::string(kCloudPath) + "\"/>"
+        "<circle cx=\"12\" cy=\"14.2\" r=\"1.8\" fill=\"#FFFFFF\"/>"
+        "</svg>";
+    auto img = std::make_unique<Fl_SVG_Image>(nullptr, svg.c_str());
+    img->scale(16, 16, 1, 1);
+    return img;
+}
 
 constexpr const char* kSettingsPath =
     "M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5"
@@ -43,7 +86,12 @@ IconSet::IconSet(const std::string& hexColor, int size)
     , code_(buildSvg(kCodePath, hexColor, size))
     , play_(buildSvg(kPlayPath, hexColor, size))
     , settings_(buildSvg(kSettingsPath, hexColor, size))
-    , trash_(buildSvg(kTrashPath, hexColor, size)) {}
+    , refresh_(buildSvg(kRefreshPath, hexColor, size))
+    , trash_(buildSvg(kTrashPath, hexColor, size))
+    , gitSynced_(makeCloudIcon("#2E9B57", kCloudCheck, false))
+    , gitNotSynced_(makeCloudIcon("#D4880A", kCloudAlert, true))
+    , gitDirty_(makeDirtyCloud())
+    , gitUnavailable_(makeCloudIcon("#8E8E93", nullptr, false)) {}
 
 std::unique_ptr<Fl_SVG_Image> IconSet::buildSvg(const char* pathData, const std::string& hexColor, int size) {
     std::string svg =

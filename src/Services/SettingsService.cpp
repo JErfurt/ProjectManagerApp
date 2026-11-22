@@ -43,34 +43,54 @@ bool parseInt(const std::string& text, int& out) {
     return true;
 }
 
-bool parseColumnWidths(const std::string& text, int* widths, bool& droppedActionsColumn) {
-    droppedActionsColumn = false;
+void insertGitColumn(const std::vector<int>& six, int* widths, int& sortColumn) {
+    for (int i = 0; i < 4; ++i) {
+        widths[i] = six[static_cast<std::size_t>(i)];
+    }
+    widths[4] = 58;
+    widths[5] = six[4];
+    widths[6] = six[5];
+    if (sortColumn >= 4) {
+        ++sortColumn;
+    }
+}
+
+bool assignColumnWidths(const std::string& text, int layoutVersion, int* widths, int& sortColumn) {
     std::vector<int> parsed;
     std::size_t start = 0;
     while (start <= text.size()) {
         std::size_t comma = text.find(',', start);
         std::string token = text.substr(start, comma == std::string::npos ? std::string::npos : comma - start);
         int value = 0;
-        if (!parseInt(token, value) || value < 40 || value > 4000) return false;
+        if (!parseInt(token, value) || value < 36 || value > 4000) return false;
         parsed.push_back(value);
         if (comma == std::string::npos) break;
         start = comma + 1;
         if (start >= text.size()) return false;
     }
 
-    int offset = 0;
-    if (static_cast<int>(parsed.size()) == kSettingsColumnCount + 1) {
-        // Раньше первым столбцом были кнопки действий.
-        offset = 1;
-        droppedActionsColumn = true;
-    } else if (static_cast<int>(parsed.size()) != kSettingsColumnCount) {
-        return false;
+    if (layoutVersion >= 2 && static_cast<int>(parsed.size()) == kSettingsColumnCount) {
+        for (int i = 0; i < kSettingsColumnCount; ++i) {
+            widths[i] = parsed[static_cast<std::size_t>(i)];
+        }
+        return true;
     }
 
-    for (int i = 0; i < kSettingsColumnCount; ++i) {
-        widths[i] = parsed[static_cast<std::size_t>(i + offset)];
+    if (layoutVersion < 2 && parsed.size() == 6) {
+        insertGitColumn(parsed, widths, sortColumn);
+        return true;
     }
-    return true;
+
+    if (layoutVersion < 2 && parsed.size() == 7) {
+        // Раньше первым столбцом были кнопки действий, столбца Git ещё не было.
+        if (sortColumn > 0) {
+            --sortColumn;
+        }
+        insertGitColumn(std::vector<int>(parsed.begin() + 1, parsed.end()), widths, sortColumn);
+        return true;
+    }
+
+    return false;
 }
 
 } // namespace
@@ -88,7 +108,8 @@ AppSettings SettingsService::load() {
     bool hasY = false;
     bool hasW = false;
     bool hasH = false;
-    bool droppedActionsColumn = false;
+    std::string columnsRaw;
+    int columnsLayout = 0;
 
     std::string line;
     while (std::getline(in, line)) {
@@ -111,9 +132,16 @@ AppSettings SettingsService::load() {
         } else if (key == "window_h") {
             hasH = parseInt(value, settings.windowH);
         } else if (key == "columns") {
-            settings.hasColumnWidths = parseColumnWidths(value, settings.columnWidths, droppedActionsColumn);
+            columnsRaw = value;
+        } else if (key == "columns_layout") {
+            parseInt(value, columnsLayout);
         } else if (key == "editor") {
             settings.codeEditorPath = value;
+        } else if (key == "git_status") {
+            int flag = 1;
+            if (parseInt(value, flag)) {
+                settings.gitStatusEnabled = flag != 0;
+            }
         } else if (key == "sort_column") {
             parseInt(value, settings.sortColumn);
         } else if (key == "sort_ascending") {
@@ -131,8 +159,9 @@ AppSettings SettingsService::load() {
         settings.windowH = 600;
     }
 
-    if (droppedActionsColumn && settings.sortColumn > 0) {
-        settings.sortColumn -= 1;
+    if (!columnsRaw.empty()) {
+        settings.hasColumnWidths = assignColumnWidths(
+            columnsRaw, columnsLayout, settings.columnWidths, settings.sortColumn);
     }
     if (settings.sortColumn < 0 || settings.sortColumn >= kSettingsColumnCount) {
         settings.sortColumn = -1;
@@ -159,7 +188,9 @@ void SettingsService::save(const AppSettings& settings) {
         out << settings.columnWidths[i];
     }
     out << "\n";
+    out << "columns_layout=2\n";
     out << "editor=" << editor << "\n";
+    out << "git_status=" << (settings.gitStatusEnabled ? 1 : 0) << "\n";
     out << "sort_column=" << settings.sortColumn << "\n";
     out << "sort_ascending=" << (settings.sortAscending ? 1 : 0) << "\n";
 

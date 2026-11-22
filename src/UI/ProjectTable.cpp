@@ -20,6 +20,7 @@ constexpr const char* kColumnHeaders[] = {
     "Описание",
     "Статус",
     "Тип",
+    "Git",
     "Взаимодействие",
     "Директория"
 };
@@ -29,9 +30,37 @@ constexpr int kInitialColWidths[] = {
     270, // Описание
     120, // Статус
     115, // Тип
+    58,  // Git
     175, // Последнее взаимодействие
     240  // Директория
 };
+
+void drawGitStatus(const Project* project, bool selected, int X, int Y, int W, int H,
+                   const Theme& theme, const IconSet& icons) {
+    if (!project || project->gitSync == GitSync::NotARepo || project->gitSync == GitSync::Disabled) {
+        fl_font(FL_HELVETICA, 14);
+        fl_color(selected ? theme.selectionText : theme.mutedText);
+        fl_draw("—", X, Y, W, H, FL_ALIGN_CENTER | FL_ALIGN_INSIDE);
+        return;
+    }
+
+    Fl_SVG_Image* cloud = icons.gitUnavailable();
+    if (project->gitSync != GitSync::Unknown) {
+        if (project->gitDirty) {
+            cloud = icons.gitDirty();
+        } else if (project->gitSync == GitSync::Synced) {
+            cloud = icons.gitSynced();
+        } else if (project->gitSync == GitSync::NotSynced) {
+            cloud = icons.gitNotSynced();
+        }
+    }
+    if (!cloud) return;
+
+    const int size = cloud->w() > 0 ? cloud->w() : 16;
+    const int ix = X + std::max(0, (W - size) / 2);
+    const int iy = Y + std::max(0, (H - size) / 2);
+    cloud->draw(ix, iy);
+}
 
 } // namespace
 
@@ -95,7 +124,7 @@ ProjectTable::ProjectTable(int X, int Y, int W, int H, const Theme& theme, const
     row_height_all(38);
 
     col_resize(1);
-    col_resize_min(60);
+    col_resize_min(48);
 
     for (int c = 0; c < static_cast<int>(Column::Count); ++c) {
         col_width(c, kInitialColWidths[c]);
@@ -161,7 +190,7 @@ int ProjectTable::findRowByProjectId(int projectId) const {
 void ProjectTable::setColumnWidths(const int* widths) {
     if (!widths) return;
     for (int c = 0; c < static_cast<int>(Column::Count); ++c) {
-        int width = std::max(60, widths[c]);
+        int width = std::max(48, widths[c]);
         col_width(c, width);
     }
     rememberColumnWidths();
@@ -533,6 +562,18 @@ void ProjectTable::updateHover(int row, int col) {
     if (hoverRow_ >= 0 && hoverRow_ < rows() && isLanguage(hoverCol_)) {
         redraw_range(hoverRow_, hoverRow_, hoverCol_, hoverCol_);
     }
+
+    if (col == static_cast<int>(Column::Git) && row >= 0 && row < static_cast<int>(projects_.size())) {
+        copy_tooltip(projects_[static_cast<std::size_t>(row)]->gitTooltip.c_str());
+    } else if (oldCol == static_cast<int>(Column::Git)) {
+        copy_tooltip(nullptr);
+    }
+}
+
+void ProjectTable::refreshHoverTooltip() {
+    if (hoverCol_ != static_cast<int>(Column::Git)) return;
+    if (hoverRow_ < 0 || hoverRow_ >= static_cast<int>(projects_.size())) return;
+    copy_tooltip(projects_[static_cast<std::size_t>(hoverRow_)]->gitTooltip.c_str());
 }
 
 void ProjectTable::clearHover() {
@@ -541,6 +582,9 @@ void ProjectTable::clearHover() {
     int oldCol = hoverCol_;
     hoverRow_ = -1;
     hoverCol_ = -1;
+    if (oldCol == static_cast<int>(Column::Git)) {
+        copy_tooltip(nullptr);
+    }
     if (oldRow >= 0 && oldRow < rows() && oldCol == static_cast<int>(Column::Language)) {
         redraw_range(oldRow, oldRow, oldCol, oldCol);
     }
@@ -623,6 +667,12 @@ void ProjectTable::draw_cell(TableContext context, int R, int C, int X, int Y, i
             fl_color(theme_.gridLine);
             fl_line(X + W - 1, Y, X + W - 1, Y + H - 1);
             fl_line(X, Y + H - 1, X + W - 1, Y + H - 1);
+
+            if (static_cast<Column>(C) == Column::Git) {
+                drawGitStatus(p, selected, X, Y, W, H, theme_, icons_);
+                fl_pop_clip();
+                return;
+            }
 
             std::string text;
             bool isMuted = false;

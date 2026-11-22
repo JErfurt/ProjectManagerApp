@@ -1,15 +1,16 @@
 #include "UI/MainWindow.hpp"
 
 #include "Services/CodeEditorService.hpp"
+#include "Services/GitStatusService.hpp"
 #include "Services/PlatformService.hpp"
 #include "Services/ProjectService.hpp"
 
 #include <FL/Fl.H>
 #include <FL/Fl_Box.H>
 #include <FL/Fl_Button.H>
+#include <FL/Fl_Check_Button.H>
 #include <FL/Fl_Input.H>
 #include <FL/Fl_Native_File_Chooser.H>
-#include <FL/Fl_Return_Button.H>
 #include <FL/Fl_Window.H>
 #include <FL/x.H>
 
@@ -18,6 +19,8 @@
 #include <string>
 
 namespace ProjectManager {
+
+std::atomic<MainWindow*> MainWindow::gitUiOwner_{nullptr};
 
 static_assert(static_cast<int>(ProjectTable::Column::Count) == kSettingsColumnCount,
               "Column count and saved settings layout must match");
@@ -85,6 +88,29 @@ bool missingInteraction(const Project* project) {
     return !TimeUtil::parseIso8601ToUtc(project->lastInteractionIso, parsed, hasTimezone);
 }
 
+int gitRank(const Project* project) {
+    if (!project || project->gitSync == GitSync::Unknown) return 50;
+    if (project->gitSync == GitSync::Unavailable) return 40;
+    if (project->gitSync == GitSync::Disabled) return 35;
+    if (project->gitSync == GitSync::NotARepo) return 30;
+    int rank = 0;
+    if (project->gitSync == GitSync::NotSynced) rank += 2;
+    if (project->gitDirty) rank += 1;
+    return rank;
+}
+
+bool isNewerIso(const std::string& candidate, const std::string& current) {
+    if (candidate.empty()) return false;
+    std::time_t next = 0;
+    bool hasNext = false;
+    if (!TimeUtil::parseIso8601ToUtc(candidate, next, hasNext)) return false;
+    if (current.empty()) return true;
+    std::time_t prev = 0;
+    bool hasPrev = false;
+    if (!TimeUtil::parseIso8601ToUtc(current, prev, hasPrev)) return true;
+    return next > prev;
+}
+
 int compareText(const std::string& left, const std::string& right) {
     const std::string a = PlatformService::toLowerUtf8(left);
     const std::string b = PlatformService::toLowerUtf8(right);
@@ -103,6 +129,13 @@ int compareProjects(const Project* a, const Project* b, int column) {
             return compareText(a->status, b->status);
         case ProjectTable::Column::Language:
             return compareText(a->language, b->language);
+        case ProjectTable::Column::Git: {
+            const int left = gitRank(a);
+            const int right = gitRank(b);
+            if (left < right) return -1;
+            if (left > right) return 1;
+            return 0;
+        }
         case ProjectTable::Column::FolderPath:
             return compareText(a->folderPath, b->folderPath);
         case ProjectTable::Column::LastInteraction: {
@@ -129,13 +162,14 @@ std::string normalizeEditorPath(std::string path) {
     return path;
 }
 
-bool editCodeEditorPath(const Theme& theme, Fl_Window* parent, std::string& path) {
+bool editCodeEditorPath(const Theme& theme, Fl_Window* parent, std::string& path, bool& gitStatusEnabled) {
     struct State {
         bool accepted = false;
         Fl_Input* input = nullptr;
+        Fl_Check_Button* gitStatus = nullptr;
     } state;
 
-    Fl_Window dlg(540, 186, "Настройки");
+    Fl_Window dlg(540, 262, "Настройки");
     dlg.color(theme.windowBg);
     dlg.set_modal();
 
@@ -177,7 +211,7 @@ bool editCodeEditorPath(const Theme& theme, Fl_Window* parent, std::string& path
     }, state.input);
 
     auto* hint = new Fl_Box(
-        16, 82, 508, 44,
+        16, 82, 508, 32,
         "Если путь не указан, проект открывается в Visual Studio Code."
     );
     hint->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE | FL_ALIGN_WRAP);
@@ -185,7 +219,25 @@ bool editCodeEditorPath(const Theme& theme, Fl_Window* parent, std::string& path
     hint->labelcolor(theme.mutedText);
     hint->box(FL_NO_BOX);
 
-    auto* cancel = new Fl_Button(308, 140, 100, 30, "Отмена");
+    state.gitStatus = new Fl_Check_Button(16, 122, 508, 26, "Проверять статус Git автоматически");
+    state.gitStatus->value(gitStatusEnabled ? 1 : 0);
+    state.gitStatus->labelsize(14);
+    state.gitStatus->labelcolor(theme.text);
+    state.gitStatus->color(theme.controlBg);
+    state.gitStatus->selection_color(theme.selectionBg);
+    state.gitStatus->clear_visible_focus();
+
+    auto* gitHint = new Fl_Box(
+        38, 148, 486, 48,
+        "Выключите, если проекты лежат на дисках, которые не должны просыпаться. "
+        "Кнопка на панели по-прежнему проверяет статус вручную."
+    );
+    gitHint->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE | FL_ALIGN_WRAP);
+    gitHint->labelsize(13);
+    gitHint->labelcolor(theme.mutedText);
+    gitHint->box(FL_NO_BOX);
+
+    auto* cancel = new Fl_Button(308, 214, 100, 30, "Отмена");
     cancel->labelsize(14);
     cancel->labelcolor(theme.text);
     cancel->color(theme.buttonBg);
@@ -194,7 +246,7 @@ bool editCodeEditorPath(const Theme& theme, Fl_Window* parent, std::string& path
         if (w->window()) w->window()->hide();
     });
 
-    auto* save = new Fl_Return_Button(418, 140, 106, 30, "Сохранить");
+    auto* save = new Fl_Button(418, 214, 106, 30, "Сохранить");
     save->labelsize(14);
     save->labelcolor(theme.text);
     save->color(theme.buttonBg);
@@ -224,6 +276,7 @@ bool editCodeEditorPath(const Theme& theme, Fl_Window* parent, std::string& path
     }
     if (!state.accepted) return false;
     path = state.input->value() ? state.input->value() : "";
+    gitStatusEnabled = state.gitStatus->value() != 0;
     return true;
 }
 
@@ -300,6 +353,8 @@ bool confirmDeletion(const Theme& theme, Fl_Window* parent, const std::string& m
 
 MainWindow::~MainWindow() {
     Fl::remove_timeout(cbDeferredSave, this);
+    Fl::remove_timeout(cbGitRefresh, this);
+    stopGitWorker();
     if (uiReady_) {
         persistSettings();
     }
@@ -369,6 +424,15 @@ MainWindow::MainWindow(const Theme& theme)
     }
 
     applyFilter();
+    startGitWorker();
+    if (settings_.gitStatusEnabled) {
+        enqueueGitJobs(true);
+    } else {
+        for (const auto& project : allProjects_) {
+            project->gitTooltip = "Автопроверка выключена";
+        }
+        if (table_) table_->redraw();
+    }
 }
 
 void MainWindow::applySavedWindowGeometry() {
@@ -416,10 +480,13 @@ void MainWindow::showWindow() {
     if (table_) {
         table_->take_focus();
     }
+    Fl::remove_timeout(cbGitRefresh, this);
+    Fl::add_timeout(45.0, cbGitRefresh, this);
 }
 
 void MainWindow::hide() {
     Fl::remove_timeout(cbDeferredSave, this);
+    Fl::remove_timeout(cbGitRefresh, this);
     if (uiReady_) {
         persistSettings();
         uiReady_ = false;
@@ -479,6 +546,12 @@ void MainWindow::buildToolbar() {
     btnSettings_->image(icons_.settings());
     btnSettings_->tooltip("Настройки");
     btnSettings_->callback(cbOpenSettings, this);
+    curX += 32 + 10;
+
+    btnRefreshGit_ = new ToolbarButton(curX, yBtn, 32, btnH, theme_);
+    btnRefreshGit_->image(icons_.refresh());
+    btnRefreshGit_->tooltip("Проверить статус Git");
+    btnRefreshGit_->callback(cbRefreshGit, this);
     curX += 32 + 15;
 
     // Разделитель 1
@@ -588,9 +661,20 @@ void MainWindow::onOpenConfigFolder() {
 void MainWindow::onOpenSettings() {
     table_->commitEdit();
     std::string path = settings_.codeEditorPath;
-    if (!editCodeEditorPath(theme_, this, path)) return;
+    bool gitStatusEnabled = settings_.gitStatusEnabled;
+    if (!editCodeEditorPath(theme_, this, path, gitStatusEnabled)) return;
     settings_.codeEditorPath = std::move(path);
+    const bool gitChanged = settings_.gitStatusEnabled != gitStatusEnabled;
+    settings_.gitStatusEnabled = gitStatusEnabled;
     persistSettings();
+    if (gitChanged) {
+        setGitStatusEnabled(gitStatusEnabled);
+    }
+}
+
+void MainWindow::onRefreshGit() {
+    table_->commitEdit();
+    enqueueGitJobs(true);
 }
 
 void MainWindow::onAddProject() {
@@ -704,6 +788,27 @@ void MainWindow::onTableCellEdited(int projectId, ProjectTable::Column col, cons
 
     ProjectService::updateProject(*p);
 
+    if (col == ProjectTable::Column::FolderPath) {
+        if (!settings_.gitStatusEnabled) {
+            p->gitSync = GitSync::Unknown;
+            p->gitDirty = false;
+            p->gitTooltip = "Автопроверка выключена";
+        } else if (p->folderPath.empty() || !PlatformService::directoryExists(p->folderPath)) {
+            p->gitSync = GitSync::NotARepo;
+            p->gitDirty = false;
+            p->gitTooltip = p->folderPath.empty() ? "Папка проекта не указана" : "Папка не найдена";
+        } else {
+            p->gitSync = GitSync::Unknown;
+            p->gitDirty = false;
+            p->gitTooltip = "Проверка Git…";
+            enqueueGitJob(p->id, p->folderPath);
+        }
+        if (table_) {
+            table_->redraw();
+            table_->refreshHoverTooltip();
+        }
+    }
+
     if (col == ProjectTable::Column::Language) {
         applyFilter();
     }
@@ -740,6 +845,10 @@ void MainWindow::cbOpenSettings(Fl_Widget*, void* userData) {
     static_cast<MainWindow*>(userData)->onOpenSettings();
 }
 
+void MainWindow::cbRefreshGit(Fl_Widget*, void* userData) {
+    static_cast<MainWindow*>(userData)->onRefreshGit();
+}
+
 void MainWindow::cbDeferredSave(void* userData) {
     static_cast<MainWindow*>(userData)->saveUiState();
 }
@@ -754,6 +863,172 @@ void MainWindow::cbLanguageFilter(Fl_Widget*, void* userData) {
 
 void MainWindow::cbSearchInput(Fl_Widget*, void* userData) {
     static_cast<MainWindow*>(userData)->onSearchQueryChanged();
+}
+
+struct GitUiResult {
+    int id = 0;
+    std::string folder;
+    GitProbe probe;
+};
+
+void MainWindow::gitAwakeCallback(void* data) {
+    std::unique_ptr<GitUiResult> result(static_cast<GitUiResult*>(data));
+    MainWindow* self = gitUiOwner_.load();
+    if (!self || !result) return;
+    self->onGitResult(result->id, result->folder, result->probe);
+}
+
+void MainWindow::cbGitRefresh(void* userData) {
+    auto* self = static_cast<MainWindow*>(userData);
+    if (!self->uiReady_ || self->gitStop_.load()) return;
+    if (self->settings_.gitStatusEnabled) {
+        self->enqueueGitJobs(false);
+    }
+    Fl::add_timeout(45.0, cbGitRefresh, userData);
+}
+
+int MainWindow::handle(int event) {
+    const int result = Fl_Double_Window::handle(event);
+    if (event == FL_ACTIVATE && uiReady_ && !gitStop_.load() && settings_.gitStatusEnabled) {
+        enqueueGitJobs(false);
+    }
+    return result;
+}
+
+void MainWindow::startGitWorker() {
+    gitUiOwner_.store(this);
+    gitThread_ = std::thread([this] { gitWorkerLoop(); });
+}
+
+void MainWindow::setGitStatusEnabled(bool enabled) {
+    settings_.gitStatusEnabled = enabled;
+    if (!enabled) {
+        std::lock_guard<std::mutex> lock(gitMutex_);
+        gitQueue_.clear();
+        return;
+    }
+    enqueueGitJobs(true);
+}
+
+void MainWindow::stopGitWorker() {
+    {
+        std::lock_guard<std::mutex> lock(gitMutex_);
+        gitStop_.store(true);
+        gitQueue_.clear();
+    }
+    gitUiOwner_.store(nullptr);
+    gitCv_.notify_all();
+    if (gitThread_.joinable()) {
+        gitThread_.join();
+    }
+}
+
+void MainWindow::enqueueGitJobs(bool force) {
+    std::vector<GitJob> jobs;
+    jobs.reserve(allProjects_.size());
+    bool visual = false;
+    for (const auto& ptr : allProjects_) {
+        Project* project = ptr.get();
+        if (project->folderPath.empty() || !PlatformService::directoryExists(project->folderPath)) {
+            const std::string tip = project->folderPath.empty() ? "Папка проекта не указана" : "Папка не найдена";
+            if (project->gitSync != GitSync::NotARepo || project->gitDirty || project->gitTooltip != tip) {
+                project->gitSync = GitSync::NotARepo;
+                project->gitDirty = false;
+                project->gitTooltip = tip;
+                visual = true;
+            }
+            continue;
+        }
+        if (project->gitSync == GitSync::Unknown || project->gitSync == GitSync::Disabled) {
+            project->gitSync = GitSync::Unknown;
+            if (project->gitTooltip != "Проверка Git…") {
+                project->gitTooltip = "Проверка Git…";
+                visual = true;
+            }
+        }
+        jobs.push_back(GitJob{project->id, project->folderPath});
+    }
+
+    bool queued = false;
+    {
+        std::lock_guard<std::mutex> lock(gitMutex_);
+        if (!gitStop_.load()) {
+            const auto now = std::chrono::steady_clock::now();
+            const bool tooSoon = lastGitEnqueue_.time_since_epoch().count() != 0 &&
+                                 now - lastGitEnqueue_ < std::chrono::seconds(15);
+            if (force || (!tooSoon && gitQueue_.empty())) {
+                gitQueue_ = std::move(jobs);
+                lastGitEnqueue_ = now;
+                queued = true;
+            }
+        }
+    }
+    if (queued) gitCv_.notify_one();
+    if (visual && table_) {
+        table_->redraw();
+        table_->refreshHoverTooltip();
+    }
+}
+
+void MainWindow::enqueueGitJob(int id, const std::string& folder) {
+    {
+        std::lock_guard<std::mutex> lock(gitMutex_);
+        if (gitStop_.load()) return;
+        gitQueue_.erase(std::remove_if(gitQueue_.begin(), gitQueue_.end(),
+                                       [id](const GitJob& job) { return job.id == id; }),
+                        gitQueue_.end());
+        gitQueue_.push_back(GitJob{id, folder});
+    }
+    gitCv_.notify_one();
+}
+
+void MainWindow::gitWorkerLoop() {
+    while (!gitStop_.load()) {
+        GitJob job;
+        {
+            std::unique_lock<std::mutex> lock(gitMutex_);
+            gitCv_.wait(lock, [this] { return gitStop_.load() || !gitQueue_.empty(); });
+            if (gitStop_.load()) return;
+            job = std::move(gitQueue_.front());
+            gitQueue_.erase(gitQueue_.begin());
+        }
+
+        if (gitStop_.load()) return;
+
+        GitProbe probe = GitStatusService::probe(job.folder);
+        if (gitStop_.load()) return;
+
+        auto* result = new GitUiResult();
+        result->id = job.id;
+        result->folder = std::move(job.folder);
+        result->probe = std::move(probe);
+        Fl::awake(gitAwakeCallback, result);
+    }
+}
+
+void MainWindow::onGitResult(int projectId, const std::string& folder, const GitProbe& probe) {
+    Project* project = findProjectById(projectId);
+    if (!project || project->folderPath != folder) return;
+
+    project->gitSync = probe.sync;
+    project->gitDirty = probe.dirty;
+    project->gitTooltip = probe.tooltip;
+
+    const bool dateChanged = isNewerIso(probe.activityIso, project->lastInteractionIso);
+    if (dateChanged) {
+        project->lastInteractionIso = probe.activityIso;
+        ProjectService::updateLastInteraction(project->id, project->lastInteractionIso);
+    }
+
+    const bool sortByDate = settings_.sortColumn == static_cast<int>(ProjectTable::Column::LastInteraction);
+    const bool sortByGit = settings_.sortColumn == static_cast<int>(ProjectTable::Column::Git);
+    if (table_ && ((dateChanged && sortByDate) || sortByGit) && !table_->isEditing()) {
+        table_->sortCurrent(makeSortLess());
+    }
+    if (table_) {
+        table_->redraw();
+        table_->refreshHoverTooltip();
+    }
 }
 
 } // namespace ProjectManager

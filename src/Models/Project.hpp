@@ -9,6 +9,15 @@
 
 namespace ProjectManager {
 
+enum class GitSync {
+    Unknown = 0,
+    NotARepo,
+    Unavailable,
+    Synced,
+    NotSynced,
+    Disabled
+};
+
 struct Project {
     int id = 0;
     std::string name;
@@ -17,6 +26,10 @@ struct Project {
     std::string folderPath;
     std::string language;
     std::string lastInteractionIso; // ISO-8601 string or empty if null
+
+    GitSync gitSync = GitSync::Unknown;
+    bool gitDirty = false;
+    std::string gitTooltip;
 
     std::string lastInteractionDisplay() const;
 };
@@ -93,14 +106,13 @@ inline int computeLocalOffsetSeconds(std::time_t utcTime, const std::tm& localTm
     return static_cast<int>(asUtc - utcTime);
 }
 
-inline std::string currentTimestampIso8601() {
-    std::time_t now = std::time(nullptr);
+inline std::string timestampIso8601(std::time_t utcTime) {
     std::tm localTm{};
-    if (!localtimePortable(now, localTm)) {
+    if (!localtimePortable(utcTime, localTm)) {
         return {};
     }
 
-    int offsetSec = computeLocalOffsetSeconds(now, localTm);
+    int offsetSec = computeLocalOffsetSeconds(utcTime, localTm);
     char sign = offsetSec >= 0 ? '+' : '-';
     int absOff = offsetSec >= 0 ? offsetSec : -offsetSec;
     int offH = absOff / 3600;
@@ -119,6 +131,10 @@ inline std::string currentTimestampIso8601() {
         sign, offH, offM
     );
     return buf;
+}
+
+inline std::string currentTimestampIso8601() {
+    return timestampIso8601(std::time(nullptr));
 }
 
 inline bool parseIso8601ToUtc(const std::string& iso, std::time_t& outUtc, bool& hasTimezone) {

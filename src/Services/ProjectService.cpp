@@ -200,6 +200,24 @@ void ProjectService::updateProject(const Project& project) {
     sqlite3_step(stmt.stmt);
 }
 
+void ProjectService::updateLastInteraction(int id, const std::string& iso) {
+    if (id <= 0 || iso.empty()) return;
+    ensureInitialized();
+
+    SqliteDb db(dbPath());
+    if (!db.handle) return;
+
+    const char* updateSql =
+        "UPDATE Projects SET LastInteraction = ?1 WHERE Id = ?2;";
+
+    SqliteStmt stmt(db.handle, updateSql);
+    if (!stmt.stmt) return;
+
+    bindText(stmt.stmt, 1, iso);
+    sqlite3_bind_int(stmt.stmt, 2, id);
+    sqlite3_step(stmt.stmt);
+}
+
 void ProjectService::deleteProject(int id) {
     if (id <= 0) return;
     ensureInitialized();

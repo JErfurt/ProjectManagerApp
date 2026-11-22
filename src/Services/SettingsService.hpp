@@ -4,7 +4,7 @@
 
 namespace ProjectManager {
 
-constexpr int kSettingsColumnCount = 6;
+constexpr int kSettingsColumnCount = 7;
 
 struct AppSettings {
     int windowX = 0;
@@ -13,10 +13,11 @@ struct AppSettings {
     int windowH = 600;
     bool hasWindowGeometry = false;
 
-    int columnWidths[kSettingsColumnCount] = {180, 270, 120, 115, 175, 240};
+    int columnWidths[kSettingsColumnCount] = {180, 270, 120, 115, 58, 175, 240};
     bool hasColumnWidths = false;
 
     std::string codeEditorPath;
+    bool gitStatusEnabled = true;
 
     int sortColumn = -1;
     bool sortAscending = true;

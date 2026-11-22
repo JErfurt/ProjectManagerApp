@@ -104,6 +104,8 @@ set(APP_SOURCES
     src/Services/CodeEditorService.cpp
     src/Services/ProjectService.hpp
     src/Services/ProjectService.cpp
+    src/Services/GitStatusService.hpp
+    src/Services/GitStatusService.cpp
     src/Services/SettingsService.hpp
     src/Services/SettingsService.cpp
     src/UI/Theme.hpp
@@ -171,6 +173,7 @@ if(WIN32)
             )
         endif()
         target_link_options(ProjectManagerApp PRIVATE
+            -pthread
             $<$<CONFIG:Release>:-Wl,--gc-sections -s>
         )
     endif()
