@@ -2,6 +2,7 @@
 
 #include <FL/Fl.H>
 #include <FL/Fl_Menu_Item.H>
+#include <FL/Fl_Multi_Label.H>
 #include <FL/Fl_Tooltip.H>
 #include <FL/fl_draw.H>
 
@@ -16,11 +17,11 @@ namespace {
 
 constexpr const char* kColumnHeaders[] = {
     "Действия",
-    "Название проекта",
+    "Название",
     "Описание",
     "Статус",
     "Тип",
-    "Последнее взаимодействие",
+    "Взаимодействие",
     "Директория"
 };
 
@@ -66,6 +67,12 @@ public:
             if (key == FL_Tab) {
                 bool shift = (Fl::event_state() & FL_SHIFT) != 0;
                 owner_->moveEditToNextCell(shift);
+                return 1;
+            }
+            bool shift = (Fl::event_state() & FL_SHIFT) != 0;
+            if (key == FL_Menu || (key == (FL_F + 10) && shift)) {
+                owner_->commitEdit();
+                owner_->openContextMenuForKeyboard();
                 return 1;
             }
         } else if (event == FL_UNFOCUS) {
@@ -121,6 +128,12 @@ ProjectTable::ProjectTable(int X, int Y, int W, int H, const Theme& theme, const
 }
 
 void ProjectTable::setProjects(std::vector<Project*> visibleProjects) {
+    int keepId = -1;
+    int selected = selectedRow();
+    if (selected >= 0 && selected < static_cast<int>(projects_.size())) {
+        keepId = projects_[static_cast<std::size_t>(selected)]->id;
+    }
+
     cancelEdit();
     clearHover();
     pressedRow_ = -1;
@@ -129,7 +142,17 @@ void ProjectTable::setProjects(std::vector<Project*> visibleProjects) {
     projects_ = std::move(visibleProjects);
     rows(static_cast<int>(projects_.size()));
     row_height_all(38);
-    redraw();
+
+    int row = keepId >= 0 ? findRowByProjectId(keepId) : -1;
+    if (row < 0 && !projects_.empty()) {
+        row = 0;
+    }
+    if (row >= 0) {
+        selectAndScrollToRow(row);
+    } else {
+        select_all_rows(0);
+        redraw();
+    }
 }
 
 void ProjectTable::appendVisibleProject(Project* project) {
@@ -202,12 +225,49 @@ void ProjectTable::notifyColumnWidthsChanged() {
     }
 }
 
+int ProjectTable::selectedRow() {
+    for (int r = 0; r < rows(); ++r) {
+        if (row_selected(r)) return r;
+    }
+    return -1;
+}
+
+void ProjectTable::moveSelectionBy(int delta) {
+    if (rows() <= 0 || delta == 0) return;
+    int cur = selectedRow();
+    int next = cur < 0 ? (delta < 0 ? rows() - 1 : 0) : cur + delta;
+    if (next < 0) next = 0;
+    if (next >= rows()) next = rows() - 1;
+    if (next != cur) {
+        selectAndScrollToRow(next);
+    }
+}
+
+void ProjectTable::moveSelectionPage(int direction) {
+    if (rows() <= 0 || direction == 0) return;
+    int page = 1;
+    if (botrow >= toprow) {
+        page = std::max(1, botrow - toprow);
+        if (page > 1) --page;
+    }
+    moveSelectionBy(direction * page);
+}
+
 void ProjectTable::selectAndScrollToRow(int row) {
     if (row < 0 || row >= rows()) return;
     select_all_rows(0);
     select_row(row, 1);
-    if (row < toprow || row > botrow) {
-        row_position(row);
+    current_row = row;
+    Fl_Table::select_row = row;
+    current_col = static_cast<int>(Column::Name);
+    select_col = current_col;
+    if (botrow >= toprow) {
+        if (row < toprow) {
+            row_position(row);
+        } else if (row > botrow) {
+            int visible = std::max(1, botrow - toprow);
+            row_position(std::max(0, row - visible + 1));
+        }
     }
     redraw();
 }
@@ -388,23 +448,79 @@ void ProjectTable::openLanguagePopup(int row, int col) {
     }
 }
 
+void ProjectTable::openContextMenuForKeyboard() {
+    if (projects_.empty()) return;
+    int row = selectedRow();
+    if (row < 0) {
+        row = 0;
+        selectAndScrollToRow(row);
+    } else if (botrow >= toprow && (row < toprow || row > botrow)) {
+        selectAndScrollToRow(row);
+    }
+
+    int X = 0, Y = 0, W = 0, H = 0;
+    find_cell(CONTEXT_CELL, row, static_cast<int>(Column::Name), X, Y, W, H);
+    int menuX = X + 16;
+    int menuY = Y + H - 2;
+    int left = x() + 8;
+    int right = x() + w() - 32;
+    if (menuX < left) menuX = left;
+    if (menuX > right) menuX = right;
+    openContextMenu(row, menuX, menuY);
+}
+
 void ProjectTable::openContextMenu(int row, int menuX, int menuY) {
     if (row < 0 || row >= static_cast<int>(projects_.size())) return;
     commitEdit();
+    if (row < 0 || row >= static_cast<int>(projects_.size())) return;
 
-    Fl_Menu_Item menu[2] = {};
-    menu[0].text = "Удалить строку";
-    menu[0].labeltype_ = FL_NORMAL_LABEL;
-    menu[0].labelfont_ = FL_HELVETICA;
-    menu[0].labelsize_ = 14;
-    menu[0].labelcolor_ = theme_.text;
+    const Project* project = projects_[static_cast<std::size_t>(row)];
+    const bool hasFolder = !project->folderPath.empty();
+
+    struct ItemDef {
+        const char* text;
+        Fl_Image* image;
+        int code;
+        int flags;
+    };
+    const ItemDef defs[] = {
+        {" Открыть папку", icons_.folder(), static_cast<int>(Action::OpenFolder), hasFolder ? 0 : FL_MENU_INACTIVE},
+        {" Открыть в редакторе", icons_.code(), static_cast<int>(Action::OpenEditor), hasFolder ? 0 : FL_MENU_INACTIVE},
+        {" Запустить", icons_.play(), static_cast<int>(Action::RunScript),
+         (hasFolder ? 0 : FL_MENU_INACTIVE) | FL_MENU_DIVIDER},
+        {" Удалить", icons_.trash(), -1, 0},
+    };
+    constexpr int kItemCount = 4;
+
+    Fl_Menu_Item menu[kItemCount + 1] = {};
+    Fl_Multi_Label labels[kItemCount] = {};
+    for (int i = 0; i < kItemCount; ++i) {
+        labels[i].labela = reinterpret_cast<const char*>(defs[i].image);
+        labels[i].typea = FL_IMAGE_LABEL;
+        labels[i].labelb = defs[i].text;
+        labels[i].typeb = FL_NORMAL_LABEL;
+
+        menu[i].multi_label(&labels[i]);
+        menu[i].labelfont_ = FL_HELVETICA;
+        menu[i].labelsize_ = 14;
+        menu[i].labelcolor_ = theme_.text;
+        menu[i].flags = defs[i].flags;
+        menu[i].user_data_ = reinterpret_cast<void*>(static_cast<std::intptr_t>(defs[i].code));
+    }
 
     const Fl_Menu_Item* chosen = menu->popup(menuX, menuY, nullptr, nullptr, nullptr);
-    if (chosen == &menu[0] && row < static_cast<int>(projects_.size())) {
-        int projectId = projects_[static_cast<std::size_t>(row)]->id;
+    if (!chosen || row < 0 || row >= static_cast<int>(projects_.size())) return;
+
+    int projectId = projects_[static_cast<std::size_t>(row)]->id;
+    int code = static_cast<int>(reinterpret_cast<std::intptr_t>(chosen->user_data_));
+    if (code < 0) {
         if (onDeleteProject) {
             onDeleteProject(projectId);
         }
+        return;
+    }
+    if (onAction) {
+        onAction(projectId, static_cast<Action>(code));
     }
 }
 
@@ -709,14 +825,14 @@ int ProjectTable::handle(int event) {
 
             if (ctx == CONTEXT_CELL && rf == RESIZE_NONE && R >= 0 && R < rows()) {
                 if (Fl::event_button() == FL_RIGHT_MOUSE) {
-                    select_all_rows(0);
-                    select_row(R, 1);
-                    redraw();
+                    take_focus();
+                    selectAndScrollToRow(R);
                     openContextMenu(R, Fl::event_x(), Fl::event_y());
                     return 1;
                 }
 
                 if (Fl::event_button() == FL_LEFT_MOUSE) {
+                    take_focus();
                     if (C == static_cast<int>(Column::Actions)) {
                         int actionIdx = -1;
                         if (hitTestActionButton(R, Fl::event_x(), Fl::event_y(), actionIdx)) {
@@ -785,12 +901,40 @@ int ProjectTable::handle(int event) {
         case FL_KEYDOWN: {
             if (!editing_) {
                 int key = Fl::event_key();
+                bool shift = (Fl::event_state() & FL_SHIFT) != 0;
+                if (key == FL_Menu || (key == (FL_F + 10) && shift)) {
+                    openContextMenuForKeyboard();
+                    return 1;
+                }
+                if (key == FL_Up) {
+                    moveSelectionBy(-1);
+                    return 1;
+                }
+                if (key == FL_Down) {
+                    moveSelectionBy(1);
+                    return 1;
+                }
+                if (key == FL_Home) {
+                    if (rows() > 0) selectAndScrollToRow(0);
+                    return 1;
+                }
+                if (key == FL_End) {
+                    if (rows() > 0) selectAndScrollToRow(rows() - 1);
+                    return 1;
+                }
+                if (key == FL_Page_Up) {
+                    moveSelectionPage(-1);
+                    return 1;
+                }
+                if (key == FL_Page_Down) {
+                    moveSelectionPage(1);
+                    return 1;
+                }
                 if (key == FL_Enter || key == FL_KP_Enter || key == (FL_F + 2)) {
-                    for (int r = 0; r < rows(); ++r) {
-                        if (row_selected(r)) {
-                            beginTextEdit(r, static_cast<int>(Column::Name));
-                            return 1;
-                        }
+                    int row = selectedRow();
+                    if (row >= 0) {
+                        beginTextEdit(row, static_cast<int>(Column::Name));
+                        return 1;
                     }
                 }
             }

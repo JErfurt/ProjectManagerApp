@@ -341,6 +341,9 @@ void MainWindow::showWindow() {
 #else
     show();
 #endif
+    if (table_) {
+        table_->take_focus();
+    }
 }
 
 void MainWindow::hide() {

@@ -17,6 +17,7 @@ public:
     Fl_SVG_Image* code() const { return code_.get(); }
     Fl_SVG_Image* play() const { return play_.get(); }
     Fl_SVG_Image* settings() const { return settings_.get(); }
+    Fl_SVG_Image* trash() const { return trash_.get(); }
 
 private:
     static std::unique_ptr<Fl_SVG_Image> buildSvg(const char* pathData, const std::string& hexColor, int size);
@@ -27,6 +28,7 @@ private:
     std::unique_ptr<Fl_SVG_Image> code_;
     std::unique_ptr<Fl_SVG_Image> play_;
     std::unique_ptr<Fl_SVG_Image> settings_;
+    std::unique_ptr<Fl_SVG_Image> trash_;
 };
 
 } // namespace ProjectManager

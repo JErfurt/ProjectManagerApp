@@ -19,6 +19,9 @@ constexpr const char* kCodePath =
 constexpr const char* kPlayPath =
     "M8,5.14V19.14L19,12.14L8,5.14Z";
 
+constexpr const char* kTrashPath =
+    "M9,3V4H4V6H5V19A2,2 0 0,0 7,21H17A2,2 0 0,0 19,19V6H20V4H15V3H9M7,6H17V19H7V6M9,8V17H11V8H9M13,8V17H15V8H13Z";
+
 constexpr const char* kSettingsPath =
     "M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5"
     "M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.43,11L21.54,9.37"
@@ -39,7 +42,8 @@ IconSet::IconSet(const std::string& hexColor, int size)
     , search_(buildSvg(kSearchPath, hexColor, size))
     , code_(buildSvg(kCodePath, hexColor, size))
     , play_(buildSvg(kPlayPath, hexColor, size))
-    , settings_(buildSvg(kSettingsPath, hexColor, size)) {}
+    , settings_(buildSvg(kSettingsPath, hexColor, size))
+    , trash_(buildSvg(kTrashPath, hexColor, size)) {}
 
 std::unique_ptr<Fl_SVG_Image> IconSet::buildSvg(const char* pathData, const std::string& hexColor, int size) {
     std::string svg =

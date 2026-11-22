@@ -65,7 +65,11 @@ private:
     void beginTextEdit(int row, int col);
     void openLanguagePopup(int row, int col);
     void openContextMenu(int row, int menuX, int menuY);
+    void openContextMenuForKeyboard();
     void moveEditToNextCell(bool backward);
+    int selectedRow();
+    void moveSelectionBy(int delta);
+    void moveSelectionPage(int direction);
 
     bool hitTestActionButton(int row, int mouseX, int mouseY, int& outAction) const;
     void actionButtonRect(int cellX, int cellY, int cellW, int cellH, int actionIdx,
