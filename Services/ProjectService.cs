@@ -28,6 +28,9 @@ namespace ProjectManagerApp.Services
                 Directory.CreateDirectory(AppDataFolder);
             }
 
+            // Прямой вызов оставляет провайдер SQLite в графе Native AOT.
+            SQLitePCL.Batteries_V2.Init();
+
             // Создаем таблицу, если она не существует
             using var connection = new SqliteConnection(ConnectionString);
             connection.Open();

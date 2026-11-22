@@ -3,8 +3,11 @@ using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
-using MsBox.Avalonia;
-using MsBox.Avalonia.Enums;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Layout;
+using Avalonia.Media;
 
 namespace ProjectManagerApp.Services
 {
@@ -22,10 +25,7 @@ namespace ProjectManagerApp.Services
         {
             if (string.IsNullOrEmpty(folderPath) || !Directory.Exists(folderPath))
             {
-                var box = MessageBoxManager
-                    .GetMessageBoxStandard("Ошибка", "Папка не найдена!",
-                    ButtonEnum.Ok, Icon.Error);
-                await box.ShowAsync();
+                await ShowErrorAsync("Ошибка", "Папка не найдена!");
                 return;
             }
 
@@ -69,10 +69,7 @@ namespace ProjectManagerApp.Services
             }
             catch (Exception ex)
             {
-                var box = MessageBoxManager
-                    .GetMessageBoxStandard("Ошибка", $"Не удалось открыть папку: {ex.Message}",
-                    ButtonEnum.Ok, Icon.Error);
-                await box.ShowAsync();
+                await ShowErrorAsync("Ошибка", $"Не удалось открыть папку: {ex.Message}");
             }
         }
 
@@ -84,12 +81,7 @@ namespace ProjectManagerApp.Services
         {
             if (string.IsNullOrEmpty(folderPath) || !Directory.Exists(folderPath))
             {
-                var box = MessageBoxManager.GetMessageBoxStandard(
-                    "Ошибка", 
-                    "Папка проекта не найдена!",
-                    ButtonEnum.Ok, 
-                    Icon.Error);
-                await box.ShowAsync();
+                await ShowErrorAsync("Ошибка", "Папка проекта не найдена!");
                 return;
             }
 
@@ -103,12 +95,7 @@ namespace ProjectManagerApp.Services
                     scriptPath = Path.Combine(folderPath, "run.bat");
                     if (!File.Exists(scriptPath))
                     {
-                        var box = MessageBoxManager.GetMessageBoxStandard(
-                            "Ошибка", 
-                            "Файл run.bat не найден!",
-                            ButtonEnum.Ok, 
-                            Icon.Error);
-                        await box.ShowAsync();
+                        await ShowErrorAsync("Ошибка", "Файл run.bat не найден!");
                         return;
                     }
 
@@ -125,12 +112,7 @@ namespace ProjectManagerApp.Services
                     scriptPath = Path.Combine(folderPath, "run.sh");
                     if (!File.Exists(scriptPath))
                     {
-                        var box = MessageBoxManager.GetMessageBoxStandard(
-                            "Ошибка", 
-                            "Файл run.sh не найден!",
-                            ButtonEnum.Ok, 
-                            Icon.Error);
-                        await box.ShowAsync();
+                        await ShowErrorAsync("Ошибка", "Файл run.sh не найден!");
                         return;
                     }
 
@@ -149,12 +131,7 @@ namespace ProjectManagerApp.Services
             }
             catch (Exception ex)
             {
-                var box = MessageBoxManager.GetMessageBoxStandard(
-                    "Ошибка запуска", 
-                    $"Ошибка: {ex.Message}",
-                    ButtonEnum.Ok, 
-                    Icon.Error);
-                await box.ShowAsync();
+                await ShowErrorAsync("Ошибка запуска", $"Ошибка: {ex.Message}");
             }
         }
 
@@ -182,6 +159,52 @@ namespace ProjectManagerApp.Services
             {
                 return false;
             }
+        }
+
+        private static Task ShowErrorAsync(string title, string message)
+        {
+            var owner = (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow;
+            var close = new Button
+            {
+                Content = "ОК",
+                IsDefault = true,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                MinWidth = 80
+            };
+            var dialog = new Window
+            {
+                Title = title,
+                Width = 420,
+                SizeToContent = SizeToContent.Height,
+                MinHeight = 140,
+                CanResize = false,
+                WindowStartupLocation = owner is null
+                    ? WindowStartupLocation.CenterScreen
+                    : WindowStartupLocation.CenterOwner,
+                Content = new StackPanel
+                {
+                    Margin = new Thickness(20),
+                    Spacing = 16,
+                    Children =
+                    {
+                        new TextBlock
+                        {
+                            Text = message,
+                            TextWrapping = TextWrapping.Wrap
+                        },
+                        close
+                    }
+                }
+            };
+            close.Click += (_, _) => dialog.Close();
+
+            if (owner is null)
+            {
+                dialog.Show();
+                return Task.CompletedTask;
+            }
+
+            return dialog.ShowDialog(owner);
         }
     }
 } 

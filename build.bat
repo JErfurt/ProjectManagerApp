@@ -1,1 +1,1 @@
-dotnet publish -c Release -r win-x64 --self-contained true -o ./publish
+dotnet publish ProjectManagerApp.csproj -c Release -r win-x64 --self-contained true -o ./publish

@@ -1,4 +1,5 @@
 ﻿using Avalonia;
+using Avalonia.Win32;
 using System;
 using System.Runtime.InteropServices;
 
@@ -18,6 +19,11 @@ class Program
     public static AppBuilder BuildAvaloniaApp()
         => AppBuilder.Configure<App>()
             .UsePlatformDetect()
-            .WithInterFont()
+            .With(new Win32PlatformOptions
+            {
+                // Программная отрисовка не поднимает ANGLE и драйвер GPU,
+                // которые в этом окне добавляли десятки мегабайт приватной памяти.
+                RenderingMode = [Win32RenderingMode.Software]
+            })
             .LogToTrace();
 }
