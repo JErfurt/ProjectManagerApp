@@ -11,6 +11,7 @@
 #include <FL/Fl_Check_Button.H>
 #include <FL/Fl_Input.H>
 #include <FL/Fl_Native_File_Chooser.H>
+#include <FL/Fl_Round_Button.H>
 #include <FL/Fl_Window.H>
 #include <FL/x.H>
 
@@ -162,14 +163,15 @@ std::string normalizeEditorPath(std::string path) {
     return path;
 }
 
-bool editCodeEditorPath(const Theme& theme, Fl_Window* parent, std::string& path, bool& gitStatusEnabled) {
+bool editCodeEditorPath(const Theme& theme, Fl_Window* parent, std::string& path, bool& gitStatusEnabled, bool& relativeTime) {
     struct State {
         bool accepted = false;
         Fl_Input* input = nullptr;
         Fl_Check_Button* gitStatus = nullptr;
+        Fl_Round_Button* relativeTime = nullptr;
     } state;
 
-    Fl_Window dlg(540, 262, "Настройки");
+    Fl_Window dlg(540, 318, "Настройки");
     dlg.color(theme.windowBg);
     dlg.set_modal();
 
@@ -237,7 +239,40 @@ bool editCodeEditorPath(const Theme& theme, Fl_Window* parent, std::string& path
     gitHint->labelcolor(theme.mutedText);
     gitHint->box(FL_NO_BOX);
 
-    auto* cancel = new Fl_Button(308, 214, 100, 30, "Отмена");
+    auto* timeLabel = new Fl_Box(16, 204, 188, 26, "Время взаимодействия:");
+    timeLabel->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
+    timeLabel->labelsize(14);
+    timeLabel->labelcolor(theme.text);
+    timeLabel->box(FL_NO_BOX);
+
+    auto* exactTime = new Fl_Round_Button(208, 204, 110, 26, "Точное");
+    exactTime->type(FL_RADIO_BUTTON);
+    exactTime->value(relativeTime ? 0 : 1);
+    exactTime->labelsize(14);
+    exactTime->labelcolor(theme.text);
+    exactTime->color(theme.controlBg);
+    exactTime->selection_color(theme.selectionBg);
+    exactTime->clear_visible_focus();
+
+    state.relativeTime = new Fl_Round_Button(324, 204, 190, 26, "Относительное");
+    state.relativeTime->type(FL_RADIO_BUTTON);
+    state.relativeTime->value(relativeTime ? 1 : 0);
+    state.relativeTime->labelsize(14);
+    state.relativeTime->labelcolor(theme.text);
+    state.relativeTime->color(theme.controlBg);
+    state.relativeTime->selection_color(theme.selectionBg);
+    state.relativeTime->clear_visible_focus();
+
+    auto* timeHint = new Fl_Box(
+        16, 234, 508, 28,
+        "При относительном времени полная дата показывается при наведении."
+    );
+    timeHint->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE | FL_ALIGN_WRAP);
+    timeHint->labelsize(13);
+    timeHint->labelcolor(theme.mutedText);
+    timeHint->box(FL_NO_BOX);
+
+    auto* cancel = new Fl_Button(308, 270, 100, 30, "Отмена");
     cancel->labelsize(14);
     cancel->labelcolor(theme.text);
     cancel->color(theme.buttonBg);
@@ -246,7 +281,7 @@ bool editCodeEditorPath(const Theme& theme, Fl_Window* parent, std::string& path
         if (w->window()) w->window()->hide();
     });
 
-    auto* save = new Fl_Button(418, 214, 106, 30, "Сохранить");
+    auto* save = new Fl_Button(418, 270, 106, 30, "Сохранить");
     save->labelsize(14);
     save->labelcolor(theme.text);
     save->color(theme.buttonBg);
@@ -277,6 +312,7 @@ bool editCodeEditorPath(const Theme& theme, Fl_Window* parent, std::string& path
     if (!state.accepted) return false;
     path = state.input->value() ? state.input->value() : "";
     gitStatusEnabled = state.gitStatus->value() != 0;
+    relativeTime = state.relativeTime->value() != 0;
     return true;
 }
 
@@ -412,6 +448,7 @@ MainWindow::MainWindow(const Theme& theme)
         table_->setColumnWidths(settings_.columnWidths);
     }
     table_->setSortIndicator(settings_.sortColumn, settings_.sortAscending);
+    table_->setRelativeTime(settings_.relativeTime);
 
     end();
     resizable(table_);
@@ -662,13 +699,19 @@ void MainWindow::onOpenSettings() {
     table_->commitEdit();
     std::string path = settings_.codeEditorPath;
     bool gitStatusEnabled = settings_.gitStatusEnabled;
-    if (!editCodeEditorPath(theme_, this, path, gitStatusEnabled)) return;
+    bool relativeTime = settings_.relativeTime;
+    if (!editCodeEditorPath(theme_, this, path, gitStatusEnabled, relativeTime)) return;
     settings_.codeEditorPath = std::move(path);
     const bool gitChanged = settings_.gitStatusEnabled != gitStatusEnabled;
     settings_.gitStatusEnabled = gitStatusEnabled;
+    const bool timeChanged = settings_.relativeTime != relativeTime;
+    settings_.relativeTime = relativeTime;
     persistSettings();
     if (gitChanged) {
         setGitStatusEnabled(gitStatusEnabled);
+    }
+    if (timeChanged && table_) {
+        table_->setRelativeTime(relativeTime);
     }
 }
 

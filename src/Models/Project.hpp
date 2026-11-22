@@ -32,6 +32,7 @@ struct Project {
     std::string gitTooltip;
 
     std::string lastInteractionDisplay() const;
+    std::string lastInteractionTooltip() const;
 };
 
 inline const std::vector<std::string>& availableLanguages() {
@@ -243,10 +244,123 @@ inline std::string formatTimestampLocalDisplay(const std::string& iso) {
     return buf;
 }
 
+inline int daysFromCivil(int year, int month, int day) {
+    year -= month <= 2;
+    const int era = (year >= 0 ? year : year - 399) / 400;
+    const unsigned yoe = static_cast<unsigned>(year - era * 400);
+    const unsigned doy = (153u * static_cast<unsigned>(month + (month > 2 ? -3 : 9)) + 2) / 5
+        + static_cast<unsigned>(day) - 1;
+    const unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    return era * 146097 + static_cast<int>(doe) - 719468;
+}
+
+inline const char* ruPlural(int n, const char* one, const char* few, const char* many) {
+    int n100 = n % 100;
+    if (n100 < 0) n100 = -n100;
+    if (n100 >= 11 && n100 <= 14) return many;
+    switch (n100 % 10) {
+        case 1: return one;
+        case 2:
+        case 3:
+        case 4: return few;
+        default: return many;
+    }
+}
+
+inline std::string ruAgo(int n, const char* one, const char* few, const char* many) {
+    return std::to_string(n) + " " + ruPlural(n, one, few, many) + " назад";
+}
+
+inline std::string formatClock(const std::tm& localTm) {
+    char buf[16];
+    std::snprintf(buf, sizeof(buf), "%02d:%02d", localTm.tm_hour, localTm.tm_min);
+    return buf;
+}
+
+// Column label: recent moments stay relative, the rest of today is a clock time,
+// then yesterday / days / months / years.
+inline std::string formatTimestampRelative(const std::string& iso) {
+    if (iso.empty()) {
+        return "—";
+    }
+
+    std::time_t utcTime = 0;
+    bool hasTz = false;
+    if (!parseIso8601ToUtc(iso, utcTime, hasTz)) {
+        return iso;
+    }
+
+    std::tm thenLocal{};
+    if (!localtimePortable(utcTime, thenLocal)) {
+        return iso;
+    }
+
+    const std::time_t now = std::time(nullptr);
+    std::tm nowLocal{};
+    if (!localtimePortable(now, nowLocal)) {
+        return formatTimestampLocalDisplay(iso);
+    }
+
+    const double diffSec = std::difftime(now, utcTime);
+    if (diffSec >= 0.0 && diffSec < 60.0) {
+        return "только что";
+    }
+    if (diffSec >= 60.0 && diffSec < 3600.0) {
+        const int minutes = static_cast<int>(diffSec / 60.0);
+        return ruAgo(minutes, "минуту", "минуты", "минут");
+    }
+    constexpr double kRecentHours = 6.0 * 3600.0;
+    if (diffSec >= 3600.0 && diffSec < kRecentHours) {
+        const int hours = static_cast<int>(diffSec / 3600.0);
+        return ruAgo(hours, "час", "часа", "часов");
+    }
+
+    const int dayDelta = daysFromCivil(nowLocal.tm_year + 1900, nowLocal.tm_mon + 1, nowLocal.tm_mday)
+        - daysFromCivil(thenLocal.tm_year + 1900, thenLocal.tm_mon + 1, thenLocal.tm_mday);
+    if (dayDelta < 0) {
+        return formatTimestampLocalDisplay(iso);
+    }
+    if (dayDelta == 0) {
+        return formatClock(thenLocal);
+    }
+    if (dayDelta == 1) {
+        return "вчера";
+    }
+
+    int months = (nowLocal.tm_year - thenLocal.tm_year) * 12 + (nowLocal.tm_mon - thenLocal.tm_mon);
+    if (nowLocal.tm_mday < thenLocal.tm_mday) {
+        --months;
+    }
+    int years = nowLocal.tm_year - thenLocal.tm_year;
+    if (nowLocal.tm_mon < thenLocal.tm_mon ||
+        (nowLocal.tm_mon == thenLocal.tm_mon && nowLocal.tm_mday < thenLocal.tm_mday)) {
+        --years;
+    }
+
+    if (years >= 1) {
+        return ruAgo(years, "год", "года", "лет");
+    }
+    if (months >= 1) {
+        return ruAgo(months, "месяц", "месяца", "месяцев");
+    }
+    return ruAgo(dayDelta, "день", "дня", "дней");
+}
+
 } // namespace TimeUtil
 
 inline std::string Project::lastInteractionDisplay() const {
-    return TimeUtil::formatTimestampLocalDisplay(lastInteractionIso);
+    return TimeUtil::formatTimestampRelative(lastInteractionIso);
+}
+
+inline std::string Project::lastInteractionTooltip() const {
+    if (lastInteractionIso.empty()) {
+        return {};
+    }
+    const std::string full = TimeUtil::formatTimestampLocalDisplay(lastInteractionIso);
+    if (full == "—") {
+        return {};
+    }
+    return full;
 }
 
 } // namespace ProjectManager

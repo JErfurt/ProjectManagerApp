@@ -18,6 +18,7 @@ struct AppSettings {
 
     std::string codeEditorPath;
     bool gitStatusEnabled = true;
+    bool relativeTime = true;
 
     int sortColumn = -1;
     bool sortAscending = true;

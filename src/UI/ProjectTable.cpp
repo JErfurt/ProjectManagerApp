@@ -4,6 +4,7 @@
 #include <FL/Fl_Window.H>
 #include <FL/Fl_Menu_Item.H>
 #include <FL/Fl_Multi_Label.H>
+#include <FL/Fl_Tooltip.H>
 #include <FL/fl_draw.H>
 
 #include <algorithm>
@@ -142,6 +143,20 @@ ProjectTable::ProjectTable(int X, int Y, int W, int H, const Theme& theme, const
     editInput_->hide();
 
     end();
+    Fl::add_timeout(30.0, cbRelativeTick, this);
+}
+
+ProjectTable::~ProjectTable() {
+    Fl::remove_timeout(cbRelativeTick, this);
+}
+
+void ProjectTable::cbRelativeTick(void* data) {
+    auto* self = static_cast<ProjectTable*>(data);
+    const int col = static_cast<int>(Column::LastInteraction);
+    if (self->relativeTime_ && self->rows() > 0) {
+        self->redraw_range(0, self->rows() - 1, col, col);
+    }
+    Fl::repeat_timeout(30.0, cbRelativeTick, data);
 }
 
 void ProjectTable::setProjects(std::vector<Project*> visibleProjects) {
@@ -563,17 +578,64 @@ void ProjectTable::updateHover(int row, int col) {
         redraw_range(hoverRow_, hoverRow_, hoverCol_, hoverCol_);
     }
 
-    if (col == static_cast<int>(Column::Git) && row >= 0 && row < static_cast<int>(projects_.size())) {
-        copy_tooltip(projects_[static_cast<std::size_t>(row)]->gitTooltip.c_str());
-    } else if (oldCol == static_cast<int>(Column::Git)) {
-        copy_tooltip(nullptr);
+    if (col == static_cast<int>(Column::Git) || col == static_cast<int>(Column::LastInteraction)) {
+        applyHoverTooltip(row, col);
+    } else if (oldCol == static_cast<int>(Column::Git) ||
+               oldCol == static_cast<int>(Column::LastInteraction)) {
+        showCellTooltip(nullptr);
     }
+}
+
+void ProjectTable::showCellTooltip(const char* text) {
+    if (!text || !text[0]) {
+        copy_tooltip(nullptr);
+        Fl_Tooltip::enter_area(this, 0, 0, w(), h(), nullptr);
+        return;
+    }
+    // enter_area keeps the pointer and compares it by address, so alternate buffers.
+    hoverTipSlot_ ^= 1;
+    hoverTips_[hoverTipSlot_] = text;
+    const char* tip = hoverTips_[hoverTipSlot_].c_str();
+    copy_tooltip(tip);
+    int X = 0, Y = 0, W = w(), H = h();
+    if (hoverRow_ >= 0 && hoverCol_ >= 0) {
+        find_cell(CONTEXT_CELL, hoverRow_, hoverCol_, X, Y, W, H);
+    }
+    Fl_Tooltip::enter_area(this, X, Y, W, H, tip);
+}
+
+void ProjectTable::applyHoverTooltip(int row, int col) {
+    if (row < 0 || row >= static_cast<int>(projects_.size())) {
+        showCellTooltip(nullptr);
+        return;
+    }
+    const Project* project = projects_[static_cast<std::size_t>(row)];
+    if (col == static_cast<int>(Column::Git)) {
+        showCellTooltip(project->gitTooltip.c_str());
+        return;
+    }
+    if (col == static_cast<int>(Column::LastInteraction)) {
+        if (!relativeTime_) {
+            showCellTooltip(nullptr);
+            return;
+        }
+        const std::string tip = project->lastInteractionTooltip();
+        showCellTooltip(tip.empty() ? nullptr : tip.c_str());
+    }
+}
+
+void ProjectTable::setRelativeTime(bool relative) {
+    if (relativeTime_ == relative) return;
+    relativeTime_ = relative;
+    if (hoverCol_ == static_cast<int>(Column::LastInteraction)) {
+        applyHoverTooltip(hoverRow_, hoverCol_);
+    }
+    redraw();
 }
 
 void ProjectTable::refreshHoverTooltip() {
     if (hoverCol_ != static_cast<int>(Column::Git)) return;
-    if (hoverRow_ < 0 || hoverRow_ >= static_cast<int>(projects_.size())) return;
-    copy_tooltip(projects_[static_cast<std::size_t>(hoverRow_)]->gitTooltip.c_str());
+    applyHoverTooltip(hoverRow_, hoverCol_);
 }
 
 void ProjectTable::clearHover() {
@@ -582,8 +644,8 @@ void ProjectTable::clearHover() {
     int oldCol = hoverCol_;
     hoverRow_ = -1;
     hoverCol_ = -1;
-    if (oldCol == static_cast<int>(Column::Git)) {
-        copy_tooltip(nullptr);
+    if (oldCol == static_cast<int>(Column::Git) || oldCol == static_cast<int>(Column::LastInteraction)) {
+        showCellTooltip(nullptr);
     }
     if (oldRow >= 0 && oldRow < rows() && oldCol == static_cast<int>(Column::Language)) {
         redraw_range(oldRow, oldRow, oldCol, oldCol);
@@ -682,7 +744,9 @@ void ProjectTable::draw_cell(TableContext context, int R, int C, int X, int Y, i
                 case Column::Status:          text = p->status; break;
                 case Column::Language:        text = p->language; break;
                 case Column::LastInteraction:
-                    text = p->lastInteractionDisplay();
+                    text = relativeTime_
+                        ? p->lastInteractionDisplay()
+                        : TimeUtil::formatTimestampLocalDisplay(p->lastInteractionIso);
                     isMuted = p->lastInteractionIso.empty();
                     break;
                 case Column::FolderPath:      text = p->folderPath; break;

@@ -32,7 +32,7 @@ public:
     };
 
     ProjectTable(int X, int Y, int W, int H, const Theme& theme, const IconSet& icons);
-    ~ProjectTable() override = default;
+    ~ProjectTable() override;
 
     void setProjects(std::vector<Project*> visibleProjects);
     void appendVisibleProject(Project* project);
@@ -47,6 +47,8 @@ public:
     void sortCurrent(const std::function<bool(const Project*, const Project*)>& less);
     bool isEditing() const { return editing_; }
     void refreshHoverTooltip();
+    void setRelativeTime(bool relative);
+    bool relativeTime() const { return relativeTime_; }
 
     std::function<void(int projectId, Action action)> onAction;
     std::function<void(int projectId, Column col, const std::string& newValue)> onCellEdited;
@@ -75,6 +77,9 @@ private:
 
     void updateHover(int row, int col);
     void clearHover();
+    void applyHoverTooltip(int row, int col);
+    void showCellTooltip(const char* text);
+    static void cbRelativeTick(void* data);
     void rememberColumnWidths();
     void notifyColumnWidthsChanged();
 
@@ -90,6 +95,8 @@ private:
     int hoverRow_ = -1;
     int hoverCol_ = -1;
     int hoverHeaderCol_ = -1;
+    std::string hoverTips_[2];
+    int hoverTipSlot_ = 0;
 
     int headerPressCol_ = -1;
     int headerPressX_ = 0;
@@ -97,6 +104,7 @@ private:
 
     int sortColumn_ = -1;
     bool sortAscending_ = true;
+    bool relativeTime_ = true;
     int lastWidths_[static_cast<int>(Column::Count)] = {};
 };
 

@@ -142,6 +142,11 @@ AppSettings SettingsService::load() {
             if (parseInt(value, flag)) {
                 settings.gitStatusEnabled = flag != 0;
             }
+        } else if (key == "relative_time") {
+            int flag = 1;
+            if (parseInt(value, flag)) {
+                settings.relativeTime = flag != 0;
+            }
         } else if (key == "sort_column") {
             parseInt(value, settings.sortColumn);
         } else if (key == "sort_ascending") {
@@ -191,6 +196,7 @@ void SettingsService::save(const AppSettings& settings) {
     out << "columns_layout=2\n";
     out << "editor=" << editor << "\n";
     out << "git_status=" << (settings.gitStatusEnabled ? 1 : 0) << "\n";
+    out << "relative_time=" << (settings.relativeTime ? 1 : 0) << "\n";
     out << "sort_column=" << settings.sortColumn << "\n";
     out << "sort_ascending=" << (settings.sortAscending ? 1 : 0) << "\n";
 
