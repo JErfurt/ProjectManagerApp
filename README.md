@@ -1,114 +1,65 @@
-# ProjectManagerApp
+# ProjectManagerApp (FLTK / C++)
 
-A cross-platform project management application built on the Avalonia UI framework.
+Лёгкое кроссплатформенное настольное приложение для управления проектами, переписанное на **C++17** и **FLTK 1.4** с хранением данных в **SQLite**.
 
-## 🚀 Description
+## Особенности
 
-ProjectManagerApp is a modern desktop application for project management developed using the Avalonia UI Framework. The application provides a user-friendly interface for creating, editing, and tracking projects.
+- Минимальное потребление оперативной памяти (~3 МБ приватной памяти) и малый размер исполняемого файла (~3.5 МБ при полной статической сборке, без внешних DLL).
+- Кроссплатформенность (Windows, Linux, macOS).
+- Автоматическая поддержка светлой и тёмной системной темы (на Windows, включая тёмный заголовок окна) и Per-Monitor HiDPI.
+- Полная совместимость с существующей базой данных `projects.db` (та же схема SQLite и путь в `AppData/jerfurt/ProjectManagerApp`).
+- Фильтрация по языку программирования и мгновенный регистронезависимый поиск по названию и описанию (с поддержкой кириллицы).
+- Инлайн-редактирование полей таблицы (двойной клик / `Enter` / `F2`, переход по `Tab`), выпадающий список выбора языка, контекстное меню удаления строки (ПКМ).
+- Быстрые действия для каждого проекта: открыть папку, открыть в VS Code, запустить `run.bat` / `run.sh`.
 
-## ✨ Features
+## Сборка
 
-- 🖥️ Cross-platform (Windows, Linux, macOS)
-- 🎨 Modern user interface based on Avalonia UI
-- 📝 Project and task management
-- 💾 Local data storage
-- 🔧 Extensible architecture
+### Требования
 
-## 🛠️ Technologies
+- CMake 3.20+
+- Компилятор C++17 (MinGW GCC, MSVC, Clang)
+- Ninja (для `build.bat` на Windows)
+- FLTK 1.4 и SQLite3 подтягиваются автоматически через CMake `FetchContent`, если не найдены в системе.
 
-- **.NET 9.0** - Development platform
-- **Avalonia UI** - Cross-platform UI Framework
-- **C#** - Programming language
-- **MVVM** - Architectural pattern
+### Windows (`build.bat`)
 
-## 📋 Requirements
+```bat
+build.bat
+```
 
-- .NET 9.0 SDK or higher
-- Visual Studio 2022 / JetBrains Rider / Visual Studio Code
+Итоговый самодостаточный исполняемый файл появится в `publish\ProjectManagerApp.exe`.
 
-## 🚀 Quick Start
+### CMake (Windows / Linux / macOS)
 
-### Cloning the Repository
 ```bash
-git clone https://github.com/your-username/ProjectManagerApp.git
-cd ProjectManagerApp
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel
 ```
 
-### Building and Running
-```bash
-# Restore dependencies
-dotnet restore
+## Структура проекта
 
-# Build the project
-dotnet build
-
-# Run the application
-dotnet run
-```
-
-### Creating a Distributable Package
-```bash
-# For Windows (x64)
-dotnet publish -c Release -r win-x64 --self-contained true
-
-# For Windows (ARM64)
-dotnet publish -c Release -r win-arm64 --self-contained true
-
-# For Linux (x64)
-dotnet publish -c Release -r linux-x64 --self-contained true
-
-# For Linux (ARM64)
-dotnet publish -c Release -r linux-arm64 --self-contained true
-
-# For macOS (Intel)
-dotnet publish -c Release -r osx-x64 --self-contained true
-
-# For macOS (Apple Silicon)
-dotnet publish -c Release -r osx-arm64 --self-contained true
-```
-
-## 📁 Project Structure
-
-```
+```text
 ProjectManagerApp/
-├── App.axaml              # Main application file
-├── App.axaml.cs           # Code for the main application file
-├── MainWindow.axaml       # Main application window
-├── MainWindow.axaml.cs    # Code for the main window
-├── Models/                # Data models
-│   └── Project.cs         # Project model
-├── Services/              # Application services
-│   └── ProjectService.cs  # Service for managing projects
-├── Properties/            # Project settings
-├── Program.cs             # Application entry point
-└── ProjectManagerApp.csproj # Project file
+├── CMakeLists.txt
+├── build.bat
+├── app.manifest
+├── resources.rc
+└── src/
+    ├── main.cpp
+    ├── Models/
+    │   └── Project.hpp
+    ├── Services/
+    │   ├── CodeEditorService.hpp/.cpp
+    │   ├── PlatformService.hpp/.cpp
+    │   └── ProjectService.hpp/.cpp
+    └── UI/
+        ├── Icons.hpp/.cpp
+        ├── MainWindow.hpp/.cpp
+        ├── ProjectTable.hpp/.cpp
+        ├── SearchInput.hpp
+        └── Theme.hpp
 ```
 
-## 🤝 Contributing to the Project
+## Лицензия
 
-We welcome contributions to the development of the project! If you would like to contribute:
-
-1. Fork the repository
-2. Create a branch for your new feature (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push changes to the branch (`git push origin feature/AmazingFeature`)
-5. Create a Pull Request
-
-## 📝 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 📞 Contacts
-
-- Creator: [JErfurt](https://github.com/JErfurt)
-- Project link: [https://github.com/JErfurt/ProjectManagerApp](https://github.com/JErfurt/ProjectManagerApp)
-
-## 🙏 Acknowledgments
-
-- [Avalonia UI](https://avaloniaui.net/) - for the excellent cross-platform UI Framework
-- [.NET](https://dotnet.microsoft.com/) - for the powerful development platform
-- All contributors and users of the project
-
----
-
-⭐ If you like the project, please give it a star!
+MIT — см. [LICENSE](LICENSE).
